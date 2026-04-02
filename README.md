@@ -92,6 +92,24 @@ export default defineConfig({
 - 也可传入对象：`{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`。`path` 为挂载在当前 dev 上的路径；`port` 为可选的**额外端口**，仅在该端口提供同一预览页，整图资源仍从主 dev 地址加载。
 - **不适用于** `vite build` / `vite preview` 产物；仅本地开发时有效。
 
+**界面示意**（仓库根目录 [`demo.png`](./demo.png)）：
+
+![hyp-sprites-img 雪碧图预览页：按组展示整图、每帧缩略图与可复制代码](./demo.png)
+
+**使用步骤**
+
+1. 在 `hypSpritesImg(配置数组, { preview: true })` 中开启预览（或使用 `{ preview: { path: '...', port: … } }` 自定义路径或额外端口）。
+2. 执行 `vite` / `npm run dev`，在终端输出中找到本插件打印的预览 URL 并打开。
+3. 页面按配置中的 `name` 分组：左侧为各帧列表，右侧为对应整图预览与像素尺寸。
+
+**页面功能**
+
+- **整图预览**：每组右侧展示该雪碧图原图及 `宽×高`，便于对照切分是否与美术稿一致。
+- **每帧缩略图**：与运行时组件相同的 `background-position` / `background-size`，用于快速核对单帧。
+- **复制 Vue 组件代码**：生成 `<hypSpritesImgCom name="…" sprites-name="…" />` 片段，可直接贴进 `.vue`。
+- **复制帧名** / **复制 spritesName**：单帧名一键复制；组标题旁按钮可复制整组帧名数组（如 `["a","b"]`），便于写回 Vite 配置的 `spritesName`。
+- **帧名输入框**：可临时改名以预览文案效果；**仅影响当前预览页**，不会写入磁盘或 manifest。
+
 #### 配置项说明
 
 | 字段 | 说明 |
@@ -250,6 +268,24 @@ export default defineConfig({
 - When enabled, the terminal prints something like: `[hyp-sprites-img] … http://localhost:5173/__hyp-sprites-img-preview` (with `server.base` if set).
 - Object form: `{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`. `path` is mounted on the current dev server; optional `port` serves the same preview on an extra port (assets still load from the main dev origin).
 - **Not** for `vite build` / `vite preview` output—dev only.
+
+**Screenshot** ([`demo.png`](./demo.png) at repo root):
+
+![hyp-sprites-img dev preview: groups, per-frame thumbs, full sheet, copy actions](./demo.png)
+
+**How to use**
+
+1. Pass `{ preview: true }` as the second argument to `hypSpritesImg(…)` (or `{ preview: { path: '…', port: … } }` for a custom path or extra port).
+2. Run `vite` / `npm run dev` and open the preview URL printed by the plugin in the terminal.
+3. The page lists each configured `name` as a group: frames on the left, full sprite sheet and dimensions on the right.
+
+**What’s on the page**
+
+- **Full sheet**: Each group shows the original image and `width×height` for a quick layout check.
+- **Per-frame thumbnails**: Same `background-position` / `background-size` as the runtime component.
+- **Copy Vue snippet**: Inserts `<hypSpritesImgCom name="…" sprites-name="…" />` for pasting into `.vue` files.
+- **Copy frame name** / **Copy spritesName**: Copy a single frame key, or the whole array (e.g. `["a","b"]`) for your Vite `spritesName` config.
+- **Frame name inputs**: You can rename keys in the UI for a quick look—**preview only**; nothing is written to disk or the manifest.
 
 #### Options
 
