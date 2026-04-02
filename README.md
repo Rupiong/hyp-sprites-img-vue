@@ -1,8 +1,14 @@
 # hyp-sprites-img
 
+**Language / 语言:** [简体中文](#简体中文) · [English](#english)
+
+---
+
+## 简体中文
+
 基于 **Vite** 与 **Vue 3** 的雪碧图（精灵图）工具：在构建期根据整图尺寸与布局规则生成**静态**的每帧 `x / y / width / height`，运行时通过 Vue 组件用 `background-position` / `background-size` 展示单帧。
 
-## 能为项目带来什么
+### 能为项目带来什么
 
 - **减少请求与体积策略**：多张 UI 小图合并为一张雪碧图，浏览器只需加载一次图片资源，有利于控制网络请求数量与缓存策略（整图可被长期缓存）。
 - **坐标在构建期算好，运行时零推导**：每帧的矩形在打包时写入 manifest，页面里只按名称取图，无需在客户端用 Canvas 量图或手写大量 `background-position` 魔法数字，逻辑更清晰、行为可预测。
@@ -11,7 +17,7 @@
 - **开发体验**：可选开启雪碧图预览页，在本地快速核对所有组与帧，并复制组件片段，降低联调与排错成本。
 - **与 Vite / Vue 生态对齐**：以 Vite 插件注入虚拟模块，配合 `hyp-sprites-img/virtual` 可做 TypeScript 类型提示，与 Vue 3 组合式用法一致。
 
-## 安装
+### 安装
 
 ```bash
 npm install hyp-sprites-img
@@ -19,7 +25,7 @@ npm install hyp-sprites-img
 
 对等依赖：`vite`（5 或 6）、`vue`（3）。
 
-## 为什么组件从 `hyp-sprites-img/vue` 导入？
+### 为什么组件从 `hyp-sprites-img/vue` 导入？
 
 主入口 `hyp-sprites-img` 仅包含 **Vite 插件**与**布局计算工具**，这样在 `vite.config.ts` 里 `import { hypSpritesImg } from 'hyp-sprites-img'` 时，Node 不会去解析 `virtual:hyp-sprites-img`。  
 Vue 组件依赖该虚拟模块，因此请从子路径导入：
@@ -28,48 +34,65 @@ Vue 组件依赖该虚拟模块，因此请从子路径导入：
 import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 ```
 
-## Vite 配置
+### Vite 配置
+
+在 Vue 项目中需同时使用 `@vitejs/plugin-vue` 与本插件；`url` 可写相对项目根的路径，也可用 `path.resolve(__dirname, '…')`。
 
 ```ts
+import path from 'node:path'
+import { defineConfig, type PluginOption } from 'vite'
+import vue from '@vitejs/plugin-vue'
 import { hypSpritesImg } from 'hyp-sprites-img'
 
 export default defineConfig({
   plugins: [
-    hypSpritesImg([
-      {
-        url: 'src/assets/sprites.png',
-        name: 'sprites1',
-        spritesName: ['button', 'custom'],
-      },
-      {
-        url: 'src/assets/other.png',
-        name: 'sprites2',
-        count: 4,
-        layout: 'horizontal',
-      },
-    ]),
+    vue(),
+    hypSpritesImg(
+      [
+        {
+          url: path.resolve(__dirname, 'src/assets/sprites.png'),
+          name: 'sprites1',
+          spritesName: ['button', 'custom'],
+        },
+        {
+          url: path.resolve(__dirname, 'src/assets/other.png'),
+          name: 'sprites2',
+          count: 4,
+          layout: 'horizontal',
+        },
+      ],
+    ) as PluginOption,
   ],
 })
 ```
 
-### 开发时雪碧图预览（仅 `vite dev`）
+#### 开发时雪碧图预览（仅 `vite dev`）
 
 可选**第二参数**开启：在开发服务器上生成一页「所有组 × 所有帧」的缩略图预览（一级标题为配置中的 `name`，二级为帧名），并可一键复制 `<hypSpritesImgCom … />` 片段或帧名字符串。默认关闭，避免在未配置时暴露路由。
 
 ```ts
-hypSpritesImg(
-  [
-    { url: 'src/assets/sprites.png', name: 'sprites1', spritesName: ['a', 'b'] },
+import { defineConfig, type PluginOption } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { hypSpritesImg } from 'hyp-sprites-img'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    hypSpritesImg(
+      [
+        { url: 'src/assets/sprites.png', name: 'sprites1', spritesName: ['a', 'b'] },
+      ],
+      { preview: true },
+    ) as PluginOption,
   ],
-  { preview: true }
-)
+})
 ```
 
 - 启用后，终端会打印类似：`[hyp-sprites-img] 雪碧图预览: http://localhost:5173/__hyp-sprites-img-preview`（若配置了 `server.base` 会带上前缀）。
 - 也可传入对象：`{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`。`path` 为挂载在当前 dev 上的路径；`port` 为可选的**额外端口**，仅在该端口提供同一预览页，整图资源仍从主 dev 地址加载。
 - **不适用于** `vite build` / `vite preview` 产物；仅本地开发时有效。
 
-### 配置项说明
+#### 配置项说明
 
 | 字段 | 说明 |
 |------|------|
@@ -82,7 +105,7 @@ hypSpritesImg(
 | `alphaThreshold` | 仅 `detect`：`alpha > 阈值` 视为前景，默认 `128` |
 | `minRegionArea` | 仅 `detect`：面积小于该像素数的连通块忽略，默认 `4`（过滤噪点） |
 
-### 连通域自动检测（`detect: true`）
+#### 连通域自动检测（`detect: true`）
 
 构建期用 [sharp](https://sharp.pixelplumbing.com/) 将整图解码为 **RGBA** 缓冲（等价于浏览器里 `Image` + `Canvas` + `getImageData` 得到的像素）。
 
@@ -94,14 +117,14 @@ hypSpritesImg(
 
 适用于小图之间**透明背景**分隔的雪碧图；整张不透明、或块之间像素相连会连成一个大域，需改图或仍用等分 `layout`。
 
-### 布局规则（等分，`detect` 未开启时）
+#### 布局规则（等分，`detect` 未开启时）
 
 - **未写 `layout` 时**：`inferDefaultLayout` — 横图/方图默认按**从左到右**切宽度；竖图默认按**从上到下**切高度。若方图里实际是纵向叠放小图，请写 `layout: 'vertical'`。
 - **`vertical`**：整宽为每帧宽度，高度按 N 等分，自上而下第 `i` 帧（从 0 起）。
 - **`horizontal`**：整高为每帧高度，宽度按 N 等分，自左而右。
 - **`grid`**：`rows × cols` 个格子，每格等大；帧按先行后列排列，前 N 个名称对应前 N 格。
 
-## 页面中使用
+### 页面中使用
 
 ```vue
 <script setup lang="ts">
@@ -113,7 +136,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 </template>
 ```
 
-### 组件属性
+#### 组件属性
 
 | 属性 | 说明 |
 |------|------|
@@ -121,7 +144,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 | `spritesName` | 小图名称，或 index 字符串（如 `"0"`）；**不传则默认为 `"0"`（第一帧）** |
 | `width` / `height` | 可选。不传则使用 manifest 中该帧的宽高；只传一边时按比例缩放另一边；都传则按给定值拉伸 |
 
-## TypeScript
+### TypeScript
 
 在项目 `env.d.ts`（或 `vite-env.d.ts`）中加入对虚拟模块类型的引用：
 
@@ -129,12 +152,171 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 /// <reference types="hyp-sprites-img/virtual" />
 ```
 
-## 限制与说明
+### 限制与说明
 
 - **等分模式**：按 `layout` / 默认推断切矩形。  
 - **`detect` 模式**：依赖透明分隔与阈值，极端抗锯齿可能导致边缘碎块，可调 `alphaThreshold` / `minRegionArea`。  
 - 构建期仅解析**本地可解析**的 `url`。
 
-## 许可证
+### 许可证
 
 MIT，见 [LICENSE](./LICENSE)。
+
+---
+
+## English
+
+A **Vite** + **Vue 3** sprite sheet tool: at build time it emits **static** per-frame `x / y / width / height` from the full image and layout rules; at runtime a Vue component renders each frame with `background-position` / `background-size`.
+
+### What it offers
+
+- **Fewer requests & caching**: Many small UI images merge into one sprite; the browser loads it once, which helps with request count and long-lived caching of the whole sheet.
+- **Coordinates at build time, no runtime math**: Frame rectangles go into the manifest at build; the page only looks up by name—no Canvas probing or hand-written `background-position` numbers.
+- **Declarative usage**: Use `<hypSpritesImgCom>` with `name` / `spritesName`; when art or layout changes, mostly update config and assets.
+- **Flexible layout**: Horizontal/vertical equal splits, grid, and **connected-component detection** on transparency—for both regular grids and irregular sprites.
+- **Developer experience**: Optional dev preview page to verify groups/frames and copy snippets.
+- **Vite / Vue aligned**: Vite plugin + virtual module; `hyp-sprites-img/virtual` for TypeScript; matches Vue 3 Composition API usage.
+
+### Installation
+
+```bash
+npm install hyp-sprites-img
+```
+
+Peer dependencies: `vite` (5 or 6), `vue` (3).
+
+### Why import the component from `hyp-sprites-img/vue`?
+
+The main package `hyp-sprites-img` only exposes the **Vite plugin** and **layout helpers**, so `import { hypSpritesImg } from 'hyp-sprites-img'` in `vite.config.ts` does not make Node resolve `virtual:hyp-sprites-img`. The Vue component needs that virtual module—import from the subpath:
+
+```ts
+import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
+```
+
+### Vite configuration
+
+In a Vue app, use `@vitejs/plugin-vue` together with this plugin. `url` may be relative to the project root or `path.resolve(__dirname, '…')`.
+
+```ts
+import path from 'node:path'
+import { defineConfig, type PluginOption } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { hypSpritesImg } from 'hyp-sprites-img'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    hypSpritesImg(
+      [
+        {
+          url: path.resolve(__dirname, 'src/assets/sprites.png'),
+          name: 'sprites1',
+          spritesName: ['button', 'custom'],
+        },
+        {
+          url: path.resolve(__dirname, 'src/assets/other.png'),
+          name: 'sprites2',
+          count: 4,
+          layout: 'horizontal',
+        },
+      ],
+    ) as PluginOption,
+  ],
+})
+```
+
+#### Dev sprite preview (only `vite dev`)
+
+Optional **second argument**: one page with thumbnails for every group × frame (`name` as the top heading, frame names below), plus copy for `<hypSpritesImgCom … />` or frame names. Disabled by default so no route is exposed accidentally.
+
+```ts
+import { defineConfig, type PluginOption } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { hypSpritesImg } from 'hyp-sprites-img'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    hypSpritesImg(
+      [
+        { url: 'src/assets/sprites.png', name: 'sprites1', spritesName: ['a', 'b'] },
+      ],
+      { preview: true },
+    ) as PluginOption,
+  ],
+})
+```
+
+- When enabled, the terminal prints something like: `[hyp-sprites-img] … http://localhost:5173/__hyp-sprites-img-preview` (with `server.base` if set).
+- Object form: `{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`. `path` is mounted on the current dev server; optional `port` serves the same preview on an extra port (assets still load from the main dev origin).
+- **Not** for `vite build` / `vite preview` output—dev only.
+
+#### Options
+
+| Field | Description |
+|-------|-------------|
+| `url` | Sprite image path (relative to project root or any path Vite can resolve; absolute paths supported) |
+| `name` | Group id, matched by the component `name` prop; **must be unique** |
+| `spritesName` | Optional. Per-frame names in split order; **frame count N = array length** |
+| `count` | **Required** if `spritesName` is omitted. Frame names become `"0"`, `"1"`, … |
+| `layout` | Optional. If omitted, **inferred** from aspect ratio: width ≥ height → `horizontal`; height &gt; width → `vertical`. Or set `horizontal` / `vertical` / `{ type: 'grid', rows, cols }` (**row-major** grid) |
+| `detect` | If `true`, **connected-component detection** (see below); equal-split `layout` is not used |
+| `alphaThreshold` | Only with `detect`: pixels with `alpha > threshold` count as foreground; default `128` |
+| `minRegionArea` | Only with `detect`: ignore connected regions smaller than this many pixels; default `4` (noise) |
+
+#### Connected-component detection (`detect: true`)
+
+At build time [sharp](https://sharp.pixelplumbing.com/) decodes the image to **RGBA** (same idea as browser `Image` + `Canvas` + `getImageData`).
+
+1. Threshold **alpha** → binary foreground mask.  
+2. **4-connected** flood fill labels each region.  
+3. Bounding box per region (`x, y, width, height`).  
+4. Sort **top-to-bottom, then left-to-right** (by top-left `(y, x)`).  
+5. Align with `spritesName` (or `"0"…` from `count`) in order; the number of valid regions must be **≥** the number of names.
+
+Best for sprites separated by **transparent** gaps; a fully opaque sheet or touching regions merge—fix the artwork or use equal-split `layout`.
+
+#### Layout rules (equal split when `detect` is off)
+
+- **Default `layout`**: `inferDefaultLayout` — wide/square sheets split **left-to-right**; tall sheets **top-to-bottom**. If a square sheet is actually stacked vertically, set `layout: 'vertical'`.
+- **`vertical`**: Full image width per frame; height split into N equal bands, top to bottom.
+- **`horizontal`**: Full image height per frame; width split into N equal bands, left to right.
+- **`grid`**: `rows × cols` equal cells; frames in **row-major** order; first N names map to the first N cells.
+
+### Using in the app
+
+```vue
+<script setup lang="ts">
+import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
+</script>
+
+<template>
+  <hypSpritesImgCom name="sprites1" spritesName="button" width="100px" height="100px" />
+</template>
+```
+
+#### Component props
+
+| Prop | Description |
+|------|-------------|
+| `name` | Matches config `name`; **if omitted, the first group in the config array is used** |
+| `spritesName` | Frame name or index string (e.g. `"0"`); **defaults to `"0"` (first frame)** if omitted |
+| `width` / `height` | Optional. Omitted → manifest width/height; one side only → scale the other proportionally; both → stretch to those values |
+
+### TypeScript
+
+Reference the virtual module types in `env.d.ts` or `vite-env.d.ts`:
+
+```ts
+/// <reference types="hyp-sprites-img/virtual" />
+```
+
+### Limitations
+
+- **Equal split**: rectangles come from `layout` / default inference.  
+- **`detect` mode**: depends on transparency and thresholds; heavy anti-aliasing may leave edge fragments—tune `alphaThreshold` / `minRegionArea`.  
+- Build resolves only **locally resolvable** `url` values.
+
+### License
+
+MIT — see [LICENSE](./LICENSE).

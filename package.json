@@ -1,6 +1,11 @@
 {
   "name": "hyp-sprites-img",
   "version": "0.1.0",
+  "author": {
+    "name": "黄裕平",
+    "email": "83470005@qq.com",
+    "url": "https://github.com/Rupiong"
+  },
   "description": "Vite plugin + Vue 3 component for CSS sprite sheets (static frame rects at build time)",
   "type": "module",
   "main": "./dist/index.cjs",
