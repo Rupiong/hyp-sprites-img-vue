@@ -172,6 +172,13 @@ export function hypSpritesImg(
 
   return {
     name: 'hyp-sprites-img',
+    config() {
+      return {
+        optimizeDeps: {
+          exclude: ['hyp-sprites-img'],
+        },
+      }
+    },
     async configResolved(c) {
       config = c
     },
