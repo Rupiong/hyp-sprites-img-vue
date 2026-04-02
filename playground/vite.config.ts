@@ -9,24 +9,27 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    hypSpritesImg([
-      {
-        url: path.resolve(__dirname, "src/assets/sprite.png"),
-        name: "sprites1",
-        detect: true,
-        spritesName: ["button", "custom", "logo"],
-        alphaThreshold: 128,
-        minRegionArea: 4,
-      },
-      /** 同一雪碧图：用 count 生成帧名 "0"、"1"…（与连通域顺序对应） */
-      {
-        url: path.resolve(__dirname, "src/assets/sprite.png"),
-        name: "sprites2",
-        detect: true,
-        count: 2,
-        alphaThreshold: 128,
-        minRegionArea: 4,
-      },
-    ]) as PluginOption,
+    hypSpritesImg(
+      [
+        {
+          url: path.resolve(__dirname, "src/assets/sprite.png"),
+          name: "sprites1",
+          detect: true,
+          spritesName: ["button", "custom", "logo"],
+          alphaThreshold: 128,
+          minRegionArea: 4,
+        },
+        /** 同一雪碧图：用 count 生成帧名 "0"、"1"…（与连通域顺序对应） */
+        {
+          url: path.resolve(__dirname, "src/assets/sprite_demo.png"),
+          name: "sprites2",
+          detect: true,
+          count: 9,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+        },
+      ],
+      { preview: true }
+    ) as PluginOption,
   ],
 });

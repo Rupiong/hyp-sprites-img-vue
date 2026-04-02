@@ -1,25 +1,95 @@
-import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
-import { imageSize } from 'image-size'
-import type { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite'
 import type { PluginContext } from 'rollup'
-import { detectSpriteFramesFromFile } from './detectSprites.js'
 import {
-  computeFrames,
-  resolveFrameNames,
-  validateUniqueNames,
-  type Layout,
-  type SpriteGroupInput,
-  type SpriteFrames,
-} from './manifest.js'
+  buildSpriteGroups,
+  type ResolveSpriteUrlFn,
+} from './build-sprite-groups.js'
+import {
+  buildPreviewSections,
+  renderPreviewHtml,
+  type PreviewPageGroupInput,
+} from './preview-page.js'
+import type { SpriteGroupInput } from './manifest.js'
 
 export const VIRTUAL_ID = '\0virtual:hyp-sprites-img'
 export const RESOLVED_VIRTUAL_ID = 'virtual:hyp-sprites-img'
 
 export type HypSpritesImgOptions = SpriteGroupInput[]
 
-function toImportPath(filePath: string): string {
-  return filePath.replace(/\\/g, '/')
+const DEFAULT_PREVIEW_PATH = '/__hyp-sprites-img-preview'
+
+export type HypSpritesImgMeta = {
+  /**
+   * 开发服务器上的雪碧图帧预览。默认关闭。
+   * - `true`：启用，路径为 `/__hyp-sprites-img-preview`
+   * - 对象：可自定义 `path`、`port`（独立端口，整图仍从主 dev 加载）
+   */
+  preview?:
+    | boolean
+    | {
+        /** 默认 `/__hyp-sprites-img-preview` */
+        path?: string
+        /** 若设置，在此端口额外提供同一预览页（需主 dev 已启动以加载图片） */
+        port?: number
+      }
+}
+
+function normalizePreviewMeta(
+  meta: HypSpritesImgMeta | undefined
+): {
+  enabled: boolean
+  path: string
+  port?: number
+} {
+  if (meta?.preview == null || meta.preview === false) {
+    return { enabled: false, path: DEFAULT_PREVIEW_PATH }
+  }
+  if (meta.preview === true) {
+    return { enabled: true, path: DEFAULT_PREVIEW_PATH }
+  }
+  return {
+    enabled: true,
+    path: meta.preview.path ?? DEFAULT_PREVIEW_PATH,
+    port: meta.preview.port,
+  }
+}
+
+function normalizeBasePath(base: string): string {
+  if (!base || base === '/') return ''
+  return base.endsWith('/') ? base.slice(0, -1) : base
+}
+
+/** 与 Vite `req.url`（base 前缀未剥离时）及日志 URL 一致 */
+function previewPathWithBase(base: string, previewPath: string): string {
+  const p = previewPath.startsWith('/') ? previewPath : `/${previewPath}`
+  const b = normalizeBasePath(base)
+  if (!b) return p
+  return `${b}${p}`.replace(/\/+/g, '/')
+}
+
+/** 开发态浏览器可请求的整图路径；若雪碧图在项目根外则返回 null */
+export function spriteUrlForDev(options: {
+  root: string
+  absPath: string
+  base: string
+  /** 独立预览端口时使用，例如 http://127.0.0.1:5179 */
+  origin?: string
+}): string | null {
+  const { root, absPath, base, origin } = options
+  const rel = path.relative(root, absPath)
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return null
+  }
+  const posix = rel.split(path.sep).join('/')
+  const b = normalizeBasePath(base)
+  const pathPart = b ? `${b}/${posix}` : `/${posix}`
+  const normalized = pathPart.replace(/\/+/g, '/')
+  if (origin) {
+    return `${origin.replace(/\/$/, '')}${normalized}`
+  }
+  return normalized
 }
 
 function buildVirtualModule(
@@ -28,7 +98,7 @@ function buildVirtualModule(
     importPath: string
     imageWidth: number
     imageHeight: number
-    frames: SpriteFrames
+    frames: import('./manifest.js').SpriteFrames
   }>,
   defaultGroupName: string
 ): string {
@@ -58,50 +128,47 @@ ${body}
 `
 }
 
-async function resolveSpriteFsPath(
-  ctx: PluginContext,
-  root: string,
-  url: string
-): Promise<string> {
-  const trimmed = url.trim()
-  const noQuery = trimmed.split('?')[0]!
-
-  if (path.isAbsolute(noQuery) && fs.existsSync(noQuery)) {
-    return noQuery
+function createServerResolve(server: ViteDevServer): ResolveSpriteUrlFn {
+  return async function resolve(source, importer) {
+    return server.pluginContainer.resolveId(
+      source,
+      importer ?? undefined
+    )
   }
+}
 
-  const fromRoot = path.resolve(root, noQuery)
-  if (fs.existsSync(fromRoot)) {
-    return fromRoot
-  }
-
-  const importer = fs.existsSync(path.join(root, 'index.html'))
-    ? path.join(root, 'index.html')
-    : path.join(root, 'package.json')
-  const resolved = await ctx.resolve(trimmed, importer)
-  if (resolved?.id) {
-    const id = resolved.id.split('?')[0]!
-    if (id.startsWith('\0')) {
-      throw new Error(
-        `[hyp-sprites-img] Resolved to virtual id for url: ${JSON.stringify(url)}`
-      )
-    }
-    return id
-  }
-
-  throw new Error(
-    `[hyp-sprites-img] Cannot resolve sprite url: ${JSON.stringify(url)}`
-  )
+function previewUrlForLog(
+  server: ViteDevServer,
+  previewPath: string
+): string {
+  const cfg = server.config
+  const pathname = previewPathWithBase(cfg.base, previewPath)
+  const addr = server.httpServer?.address()
+  const port =
+    addr && typeof addr === 'object' && 'port' in addr
+      ? (addr as { port: number }).port
+      : cfg.server.port ?? 5173
+  const protocol = cfg.server.https ? 'https' : 'http'
+  const host =
+    cfg.server.host === true || cfg.server.host === '0.0.0.0'
+      ? 'localhost'
+      : (cfg.server.host as string) || 'localhost'
+  return `${protocol}://${host}:${port}${pathname}`
 }
 
 export function hypSpritesImg(
-  options: HypSpritesImgOptions | (() => HypSpritesImgOptions)
+  options: HypSpritesImgOptions | (() => HypSpritesImgOptions),
+  meta?: HypSpritesImgMeta
 ): Plugin {
   let config: ResolvedConfig
   let lastDeps: string[] = []
+  let previewHtmlCache: string | null = null
+  let previewCacheKey = ''
 
   const getOptions = (): HypSpritesImgOptions =>
     typeof options === 'function' ? options() : options
+
+  const previewCfg = normalizePreviewMeta(meta)
 
   return {
     name: 'hyp-sprites-img',
@@ -120,80 +187,167 @@ export function hypSpritesImg(
       }
 
       const groups = getOptions()
-      if (!groups.length) {
-        throw new Error('[hyp-sprites-img] plugin options array is empty')
-      }
-      validateUniqueNames(groups)
-
-      const root = config.root
-      const built: Array<{
-        name: string
-        importPath: string
-        imageWidth: number
-        imageHeight: number
-        frames: SpriteFrames
-      }> = []
-
-      const deps: string[] = []
-
-      for (const g of groups) {
-        const abs = await resolveSpriteFsPath(this, root, g.url)
-        deps.push(abs)
-
-        const names = resolveFrameNames(g)
-
-        let imageWidth: number
-        let imageHeight: number
-        let frames: SpriteFrames
-
-        if (g.detect) {
-          const d = await detectSpriteFramesFromFile(abs, names, {
-            alphaThreshold: g.alphaThreshold,
-            minRegionArea: g.minRegionArea,
-          })
-          imageWidth = d.width
-          imageHeight = d.height
-          frames = d.frames
-        } else {
-          const buf = fs.readFileSync(abs)
-          const dim = imageSize(buf)
-          if (!dim.width || !dim.height) {
-            throw new Error(`[hyp-sprites-img] Cannot read dimensions: ${abs}`)
-          }
-          imageWidth = dim.width
-          imageHeight = dim.height
-          frames = computeFrames(
-            dim.width,
-            dim.height,
-            names,
-            g.layout as Layout | undefined
-          )
-        }
-
-        built.push({
-          name: g.name,
-          importPath: toImportPath(abs),
-          imageWidth,
-          imageHeight,
-          frames,
-        })
-      }
+      const { built, deps, defaultGroupName } = await buildSpriteGroups(
+        this.resolve.bind(this) as ResolveSpriteUrlFn,
+        config.root,
+        groups
+      )
 
       lastDeps = deps
-      const defaultGroupName = groups[0]!.name
+      previewHtmlCache = null
       return buildVirtualModule(built, defaultGroupName)
     },
     configureServer(server) {
+      let previewServer: http.Server | undefined
+
+      const invalidatePreviewCache = () => {
+        previewHtmlCache = null
+        previewCacheKey = ''
+      }
+
       server.watcher.on('all', (_event, filePath) => {
         if (!lastDeps.length) return
         const norm = path.normalize(filePath)
         if (lastDeps.some((d) => path.normalize(d) === norm)) {
+          invalidatePreviewCache()
           const mod = server.moduleGraph.getModuleById(VIRTUAL_ID)
           if (mod) {
             server.moduleGraph.invalidateModule(mod)
           }
           server.ws.send({ type: 'full-reload', path: '*' })
         }
+      })
+
+      if (!previewCfg.enabled) {
+        return
+      }
+
+      const previewPathRel = previewCfg.path.startsWith('/')
+        ? previewCfg.path
+        : `/${previewCfg.path}`
+      const previewPathFull = previewPathWithBase(config.base, previewPathRel)
+
+      async function renderPreviewHtmlForServer(
+        assetOrigin?: string
+      ): Promise<string> {
+        const groups = getOptions()
+        const resolve = createServerResolve(server)
+        const { built, deps } = await buildSpriteGroups(
+          resolve,
+          config.root,
+          groups
+        )
+        lastDeps = deps
+        const key = `${deps.join('|')}|${assetOrigin ?? ''}|${config.base}`
+        if (previewHtmlCache && previewCacheKey === key) {
+          return previewHtmlCache
+        }
+
+        const pageInputs: PreviewPageGroupInput[] = []
+        for (let i = 0; i < groups.length; i++) {
+          const g = groups[i]!
+          const b = built[i]!
+          const absFs = path.resolve(b.importPath)
+          const url = spriteUrlForDev({
+            root: config.root,
+            absPath: absFs,
+            base: config.base,
+            origin: assetOrigin,
+          })
+          if (url == null) {
+            throw new Error(
+              `[hyp-sprites-img] preview: sprite file is outside project root: ${absFs}`
+            )
+          }
+          pageInputs.push({ config: g, built: b, imageUrl: url })
+        }
+
+        const sections = buildPreviewSections(pageInputs)
+        const html = renderPreviewHtml(sections)
+        previewHtmlCache = html
+        previewCacheKey = key
+        return html
+      }
+
+      server.middlewares.use((req, res, next) => {
+        const url = req.url?.split('?')[0] ?? ''
+        if (req.method !== 'GET' || url !== previewPathFull) {
+          return next()
+        }
+        void (async () => {
+          try {
+            const html = await renderPreviewHtmlForServer()
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'text/html; charset=utf-8')
+            res.end(html)
+          } catch (e) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            res.end(
+              e instanceof Error ? e.message : '[hyp-sprites-img] preview error'
+            )
+          }
+        })()
+      })
+
+      const logPreview = () => {
+        try {
+          const u = previewUrlForLog(server, previewPathRel)
+          console.log(`[hyp-sprites-img] 雪碧图预览: ${u}`)
+        } catch {
+          // ignore
+        }
+      }
+
+      server.httpServer?.once('listening', () => {
+        logPreview()
+
+        const port = previewCfg.port
+        if (port == null || !Number.isFinite(port)) {
+          return
+        }
+
+        const addr = server.httpServer?.address()
+        const mainPort =
+          addr && typeof addr === 'object' && 'port' in addr
+            ? (addr as { port: number }).port
+            : server.config.server.port ?? 5173
+        const protocol = server.config.server.https ? 'https' : 'http'
+        const origin = `${protocol}://127.0.0.1:${mainPort}`
+
+        previewServer = http.createServer((req, res) => {
+          if (req.method !== 'GET' || req.url?.split('?')[0] !== '/') {
+            res.statusCode = 404
+            res.end()
+            return
+          }
+          void (async () => {
+            try {
+              const html = await renderPreviewHtmlForServer(origin)
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'text/html; charset=utf-8')
+              res.end(html)
+            } catch (e) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+              res.end(
+                e instanceof Error
+                  ? e.message
+                  : '[hyp-sprites-img] preview error'
+              )
+            }
+          })()
+        })
+
+        previewServer.listen(port, () => {
+          console.log(
+            `[hyp-sprites-img] 雪碧图预览（独立端口）: ${protocol}://127.0.0.1:${port}/`
+          )
+        })
+
+        server.httpServer?.on('close', () => {
+          previewServer?.close()
+        })
       })
     },
   }

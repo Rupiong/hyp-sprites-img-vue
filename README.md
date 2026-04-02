@@ -2,6 +2,15 @@
 
 基于 **Vite** 与 **Vue 3** 的雪碧图（精灵图）工具：在构建期根据整图尺寸与布局规则生成**静态**的每帧 `x / y / width / height`，运行时通过 Vue 组件用 `background-position` / `background-size` 展示单帧。
 
+## 能为项目带来什么
+
+- **减少请求与体积策略**：多张 UI 小图合并为一张雪碧图，浏览器只需加载一次图片资源，有利于控制网络请求数量与缓存策略（整图可被长期缓存）。
+- **坐标在构建期算好，运行时零推导**：每帧的矩形在打包时写入 manifest，页面里只按名称取图，无需在客户端用 Canvas 量图或手写大量 `background-position` 魔法数字，逻辑更清晰、行为可预测。
+- **声明式使用，维护成本低**：通过 `<hypSpritesImgCom>` 按 `name` / `spritesName` 切换帧，换图或改布局时主要改构建配置与资源，减少散落各处的 CSS 片段。
+- **布局方式灵活**：支持横/竖等分、网格，以及基于透明背景的**连通域检测**，能适应规则排布与不规则雪碧图两类常见需求。
+- **开发体验**：可选开启雪碧图预览页，在本地快速核对所有组与帧，并复制组件片段，降低联调与排错成本。
+- **与 Vite / Vue 生态对齐**：以 Vite 插件注入虚拟模块，配合 `hyp-sprites-img/virtual` 可做 TypeScript 类型提示，与 Vue 3 组合式用法一致。
+
 ## 安装
 
 ```bash
@@ -42,6 +51,23 @@ export default defineConfig({
   ],
 })
 ```
+
+### 开发时雪碧图预览（仅 `vite dev`）
+
+可选**第二参数**开启：在开发服务器上生成一页「所有组 × 所有帧」的缩略图预览（一级标题为配置中的 `name`，二级为帧名），并可一键复制 `<hypSpritesImgCom … />` 片段或帧名字符串。默认关闭，避免在未配置时暴露路由。
+
+```ts
+hypSpritesImg(
+  [
+    { url: 'src/assets/sprites.png', name: 'sprites1', spritesName: ['a', 'b'] },
+  ],
+  { preview: true }
+)
+```
+
+- 启用后，终端会打印类似：`[hyp-sprites-img] 雪碧图预览: http://localhost:5173/__hyp-sprites-img-preview`（若配置了 `server.base` 会带上前缀）。
+- 也可传入对象：`{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`。`path` 为挂载在当前 dev 上的路径；`port` 为可选的**额外端口**，仅在该端口提供同一预览页，整图资源仍从主 dev 地址加载。
+- **不适用于** `vite build` / `vite preview` 产物；仅本地开发时有效。
 
 ### 配置项说明
 

@@ -49,7 +49,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
       <div class="row">
         <figure class="cell">
           <figcaption>spritesName="0"</figcaption>
-          <hypSpritesImgCom name="sprites2" sprites-name="0" class="thumb bordered" />
+          <hypSpritesImgCom name="sprites2" sprites-name="0" height="30px" class="thumb bordered" />
         </figure>
         <figure class="cell">
           <figcaption>spritesName="1"</figcaption>
