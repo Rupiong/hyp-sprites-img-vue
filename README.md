@@ -92,9 +92,9 @@ export default defineConfig({
 - 也可传入对象：`{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`。`path` 为挂载在当前 dev 上的路径；`port` 为可选的**额外端口**，仅在该端口提供同一预览页，整图资源仍从主 dev 地址加载。
 - **不适用于** `vite build` / `vite preview` 产物；仅本地开发时有效。
 
-**界面示意**（仓库根目录 [`demo.png`](./demo.png)）：
+**界面示意**（仓库根目录 [`demo.png`](https://github.com/Rupiong/hyp-sprites-img-vue/blob/main/demo.png)）：
 
-![hyp-sprites-img 雪碧图预览页：按组展示整图、每帧缩略图与可复制代码](./demo.png)
+![hyp-sprites-img 雪碧图预览页：按组展示整图、每帧缩略图与可复制代码](https://github.com/Rupiong/hyp-sprites-img-vue/blob/main/demo.png)
 
 **使用步骤**
 
