@@ -4,6 +4,11 @@ export type Layout =
   | { type: 'grid'; rows: number; cols: number }
 
 export interface SpriteGroupInput {
+  /**
+   * 雪碧图整图地址。
+   * - 本地：绝对路径、相对项目根路径，或可被 Vite/Rollup `resolve` 的模块路径（如 `./assets/s.png`）
+   * - 网络：`http://` / `https://`，构建时用缓存读尺寸/检测帧；**打包后 manifest 的 `url` 仍为远程地址**，不把缓存图打进产物
+   */
   url: string
   name: string
   spritesName?: string[]

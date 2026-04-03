@@ -4,6 +4,11 @@ import vue from "@vitejs/plugin-vue";
 import { hypSpritesImg } from "hyp-sprites-img";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "src"),
+    },
+  },
   server: {
     port: 5179,
   },
@@ -12,24 +17,28 @@ export default defineConfig({
     hypSpritesImg(
       [
         {
-          url: path.resolve(__dirname, "src/assets/sprite.png"),
+          url: path.resolve(__dirname, "/src/assets/css_sprites2.png"),
           name: "sprites1",
           detect: true,
-          spritesName: ["button", "custom", "logo"],
+          spritesName: ["button", "custom", "logo",'22'],
           alphaThreshold: 128,
           minRegionArea: 4,
         },
         /** 同一雪碧图：用 count 生成帧名 "0"、"1"…（与连通域顺序对应） */
         {
-          url: path.resolve(__dirname, "src/assets/sprite_demo.png"),
+          url: 'https://tdesign.gtimg.com/site/brand/wechat-pay.png',
           name: "sprites2",
           detect: true,
-          count: 9,
+          count: 1,
           alphaThreshold: 128,
           minRegionArea: 4,
         },
       ],
-      { preview: true }
+      { 
+        preview: true,
+        // path:'/__hyp-sprites-img-preview',
+        // port: 5180,
+       }
     ) as PluginOption,
   ],
 });

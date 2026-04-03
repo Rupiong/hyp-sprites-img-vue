@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { imageSize } from 'image-size'
 import { detectSpriteFramesFromFile } from './detectSprites.js'
+import { ensureRemoteSpriteCached, isRemoteSpriteUrl } from './remote-cache.js'
 import {
   computeFrames,
   resolveFrameNames,
@@ -13,6 +14,7 @@ import {
 
 export type BuiltSpriteGroup = {
   name: string
+  /** 解析后的本地路径（远程时为缓存文件，用于依赖与构建期读图） */
   importPath: string
   imageWidth: number
   imageHeight: number
@@ -45,6 +47,10 @@ async function resolveSpriteFsPath(
   url: string
 ): Promise<string> {
   const trimmed = url.trim()
+  if (isRemoteSpriteUrl(trimmed)) {
+    return await ensureRemoteSpriteCached(trimmed, root)
+  }
+
   const noQuery = trimmed.split('?')[0]!
 
   if (path.isAbsolute(noQuery) && fs.existsSync(noQuery)) {

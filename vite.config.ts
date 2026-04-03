@@ -21,7 +21,9 @@ export default defineConfig({
       external: [
         'vue',
         'vite',
+        'node:crypto',
         'node:fs',
+        'node:http',
         'node:path',
         'node:url',
         'image-size',

@@ -4,8 +4,10 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite'
 import type { PluginContext } from 'rollup'
 import {
   buildSpriteGroups,
+  type BuiltSpriteGroup,
   type ResolveSpriteUrlFn,
 } from './build-sprite-groups.js'
+import { isRemoteSpriteUrl } from './remote-cache.js'
 import {
   buildPreviewSections,
   renderPreviewHtml,
@@ -93,35 +95,49 @@ export function spriteUrlForDev(options: {
 }
 
 function buildVirtualModule(
-  groups: Array<{
-    name: string
-    importPath: string
-    imageWidth: number
-    imageHeight: number
-    frames: import('./manifest.js').SpriteFrames
-  }>,
+  built: BuiltSpriteGroup[],
+  inputs: SpriteGroupInput[],
   defaultGroupName: string
 ): string {
-  const imports = groups
-    .map((g, i) => {
-      const spec = `${g.importPath}?url`
-      return `import _url${i} from ${JSON.stringify(spec)}`
-    })
-    .join('\n')
+  if (built.length !== inputs.length) {
+    throw new Error('[hyp-sprites-img] internal: sprite groups length mismatch')
+  }
 
-  const body = groups
+  const importLines: string[] = []
+  let localImportIndex = 0
+  const urlExprs: string[] = []
+
+  for (let i = 0; i < built.length; i++) {
+    const b = built[i]!
+    const cfg = inputs[i]!
+    const trimmed = cfg.url.trim()
+    if (isRemoteSpriteUrl(trimmed)) {
+      urlExprs.push(JSON.stringify(trimmed))
+    } else {
+      const spec = `${b.importPath}?url`
+      importLines.push(
+        `import _url${localImportIndex} from ${JSON.stringify(spec)}`
+      )
+      urlExprs.push(`_url${localImportIndex}`)
+      localImportIndex += 1
+    }
+  }
+
+  const imports = importLines.join('\n')
+  const importBlock = imports ? `${imports}\n` : ''
+
+  const body = built
     .map((g, i) => {
       return `  ${JSON.stringify(g.name)}: {
     imageWidth: ${g.imageWidth},
     imageHeight: ${g.imageHeight},
     frames: ${JSON.stringify(g.frames)},
-    url: _url${i}
+    url: ${urlExprs[i]}
   }`
     })
     .join(',\n')
 
-  return `${imports}
-export const defaultGroupName = ${JSON.stringify(defaultGroupName)}
+  return `${importBlock}export const defaultGroupName = ${JSON.stringify(defaultGroupName)}
 export const manifest = {
 ${body}
 }
@@ -175,7 +191,8 @@ export function hypSpritesImg(
     config() {
       return {
         optimizeDeps: {
-          exclude: ['hyp-sprites-img'],
+          // 避免预构建时固化错误的 virtual 模块；子路径也需排除
+          exclude: ['hyp-sprites-img', 'hyp-sprites-img/vue'],
         },
       }
     },
@@ -202,7 +219,7 @@ export function hypSpritesImg(
 
       lastDeps = deps
       previewHtmlCache = null
-      return buildVirtualModule(built, defaultGroupName)
+      return buildVirtualModule(built, groups, defaultGroupName)
     },
     configureServer(server) {
       let previewServer: http.Server | undefined
@@ -254,19 +271,25 @@ export function hypSpritesImg(
         for (let i = 0; i < groups.length; i++) {
           const g = groups[i]!
           const b = built[i]!
-          const absFs = path.resolve(b.importPath)
-          const url = spriteUrlForDev({
-            root: config.root,
-            absPath: absFs,
-            base: config.base,
-            origin: assetOrigin,
-          })
-          if (url == null) {
-            throw new Error(
-              `[hyp-sprites-img] preview: sprite file is outside project root: ${absFs}`
-            )
+          let imageUrl: string
+          if (isRemoteSpriteUrl(g.url.trim())) {
+            imageUrl = g.url.trim()
+          } else {
+            const absFs = path.resolve(b.importPath)
+            const u = spriteUrlForDev({
+              root: config.root,
+              absPath: absFs,
+              base: config.base,
+              origin: assetOrigin,
+            })
+            if (u == null) {
+              throw new Error(
+                `[hyp-sprites-img] preview: sprite file is outside project root: ${absFs}`
+              )
+            }
+            imageUrl = u
           }
-          pageInputs.push({ config: g, built: b, imageUrl: url })
+          pageInputs.push({ config: g, built: b, imageUrl })
         }
 
         const sections = buildPreviewSections(pageInputs)
