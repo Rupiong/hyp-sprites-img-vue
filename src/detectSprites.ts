@@ -6,11 +6,123 @@ export interface DetectSpritesOptions {
   alphaThreshold: number
   /** 面积小于此像素数的连通块丢弃，默认 4 */
   minRegionArea: number
+  /**
+   * 合并「同一帧内被缝隙拆开」的块：对前景二值图做 Chebyshev 半径 `k` 的膨胀后再做连通域，
+   * 原前景像素按膨胀后的连通域聚成一块外接矩形。`0` 表示不膨胀（纯四连通）。
+   * 例如两坨前景相隔 1 个透明像素时，通常需 `k >= 1` 才能并成一块。
+   */
+  detectMergeGap: number
 }
 
 const defaultDetect: DetectSpritesOptions = {
   alphaThreshold: 128,
   minRegionArea: 4,
+  detectMergeGap: 0,
+}
+
+function mergeDetectOptions(
+  partial?: Partial<DetectSpritesOptions>
+): DetectSpritesOptions {
+  const o = partial ?? {}
+  return {
+    alphaThreshold: o.alphaThreshold ?? defaultDetect.alphaThreshold,
+    minRegionArea: o.minRegionArea ?? defaultDetect.minRegionArea,
+    detectMergeGap: o.detectMergeGap ?? defaultDetect.detectMergeGap,
+  }
+}
+
+/**
+ * Chebyshev 半径 r 的形态学膨胀：dst[p]=1 当且仅当 src 在 p 的「正方形邻域」max(|dx|,|dy|)≤r 内存在 1。
+ * r=0 时与 src 相同。
+ */
+export function dilateMaskChebyshev(
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radius: number
+): Uint8Array {
+  if (radius <= 0) {
+    return Uint8Array.from(src)
+  }
+  const dst = new Uint8Array(src.length)
+  const r = radius
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let v = 0
+      for (let dy = -r; dy <= r && !v; dy++) {
+        const yy = y + dy
+        if (yy < 0 || yy >= height) continue
+        const row = yy * width
+        for (let dx = -r; dx <= r && !v; dx++) {
+          const xx = x + dx
+          if (xx < 0 || xx >= width) continue
+          if (Math.max(Math.abs(dx), Math.abs(dy)) <= r && src[row + xx]) {
+            v = 1
+          }
+        }
+      }
+      dst[y * width + x] = v
+    }
+  }
+  return dst
+}
+
+/** 按连通域面积过滤：仅保留面积 >= minArea 的前景像素 */
+function maskKeepLargeComponents(
+  labels: Uint32Array,
+  width: number,
+  height: number,
+  numLabels: number,
+  minArea: number
+): Uint8Array {
+  const areas = new Uint32Array(numLabels + 1)
+  const n = width * height
+  for (let i = 0; i < n; i++) {
+    const L = labels[i]!
+    if (L) areas[L]++
+  }
+  const out = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    const L = labels[i]!
+    if (L && areas[L] >= minArea) {
+      out[i] = 1
+    }
+  }
+  return out
+}
+
+function collectBoxesByDilatedGroups(
+  mClean: Uint8Array,
+  dilatedLabels: Uint32Array,
+  width: number,
+  height: number
+): BoundingBox[] {
+  const n = width * height
+  const map = new Map<number, BoundingBox>()
+  for (let i = 0; i < n; i++) {
+    if (!mClean[i]) continue
+    const gid = dilatedLabels[i]!
+    if (!gid) continue
+    const x = i % width
+    const y = (i / width) | 0
+    const cur = map.get(gid)
+    if (!cur) {
+      map.set(gid, {
+        minX: x,
+        minY: y,
+        maxX: x,
+        maxY: y,
+        area: 1,
+      })
+    } else {
+      if (x < cur.minX) cur.minX = x
+      if (y < cur.minY) cur.minY = y
+      if (x > cur.maxX) cur.maxX = x
+      if (y > cur.maxY) cur.maxY = y
+      cur.area++
+    }
+  }
+  return sortBoxesTopLeft([...map.values()])
 }
 
 /**
@@ -98,32 +210,6 @@ export function labelConnectedComponents(
   return { labels, numLabels: label }
 }
 
-function bboxForLabel(
-  labels: Uint32Array,
-  width: number,
-  height: number,
-  labelId: number
-): BoundingBox | null {
-  let minX = width
-  let minY = height
-  let maxX = -1
-  let maxY = -1
-  let area = 0
-  const n = width * height
-  for (let i = 0; i < n; i++) {
-    if (labels[i] !== labelId) continue
-    area++
-    const x = i % width
-    const y = (i / width) | 0
-    if (x < minX) minX = x
-    if (y < minY) minY = y
-    if (x > maxX) maxX = x
-    if (y > maxY) maxY = y
-  }
-  if (area === 0) return null
-  return { minX, minY, maxX, maxY, area }
-}
-
 /** 先上后下、先左后右：按外接矩形左上角 (minY, minX) 排序 */
 export function sortBoxesTopLeft(boxes: BoundingBox[]): BoundingBox[] {
   return [...boxes].sort((a, b) => {
@@ -151,25 +237,57 @@ export function detectSpriteFramesFromRgba(
   names: string[],
   options?: Partial<DetectSpritesOptions>
 ): SpriteFrames {
-  const opt = { ...defaultDetect, ...options }
-  if (names.length === 0) {
-    throw new Error('[hyp-sprites-img] detect: names list is empty')
-  }
+  const opt = mergeDetectOptions(options)
 
   const mask = buildForegroundMask(rgba, width, height, opt.alphaThreshold)
   const { labels, numLabels } = labelConnectedComponents(mask, width, height)
 
-  const boxes: BoundingBox[] = []
-  for (let id = 1; id <= numLabels; id++) {
-    const b = bboxForLabel(labels, width, height, id)
-    if (!b || b.area < opt.minRegionArea) continue
-    boxes.push(b)
+  const mClean = maskKeepLargeComponents(
+    labels,
+    width,
+    height,
+    numLabels,
+    opt.minRegionArea
+  )
+
+  const dilated = dilateMaskChebyshev(
+    mClean,
+    width,
+    height,
+    opt.detectMergeGap
+  )
+  const { labels: dilatedLabels } = labelConnectedComponents(
+    dilated,
+    width,
+    height
+  )
+
+  const sorted = collectBoxesByDilatedGroups(
+    mClean,
+    dilatedLabels,
+    width,
+    height
+  )
+
+  if (names.length === 0) {
+    if (sorted.length === 0) {
+      throw new Error(
+        '[hyp-sprites-img] detect: no foreground regions (after minRegionArea & merge)'
+      )
+    }
+    const out: SpriteFrames = {}
+    for (let i = 0; i < sorted.length; i++) {
+      out[String(i)] = boxToSpriteRect(sorted[i]!)
+    }
+    return out
   }
 
-  const sorted = sortBoxesTopLeft(boxes)
   if (sorted.length < names.length) {
     throw new Error(
-      `[hyp-sprites-img] detect: found ${sorted.length} region(s) (after minRegionArea), need ${names.length} name(s). Try lowering alphaThreshold or minRegionArea.`
+      `[hyp-sprites-img] detect: found ${sorted.length} region(s) (after minRegionArea & merge), need ${names.length} name(s). ` +
+        `Try lowering alphaThreshold or minRegionArea, or raise detectMergeGap (Chebyshev dilation radius). ` +
+        `If detectMergeGap is too large, separate sprites may merge — try lowering it. ` +
+        `Or omit count/spritesName to use all detected regions.`
     )
   }
 

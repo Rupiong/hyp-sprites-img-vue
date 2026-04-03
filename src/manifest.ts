@@ -17,12 +17,18 @@ export interface SpriteGroupInput {
   /**
    * 为 true 时：用 RGBA + alpha 阈值做四连通域，外接矩形得到每帧 x/y/width/height，
    * 再按「先上后下、先左后右」与 `spritesName` / `count` 顺序对应（忽略 `layout` 与等分逻辑）。
+   * 若**未**配置 `spritesName` 与 `count`，则自动包含**全部**检测到的区域，帧名为 `"0"`…`"n-1"`。
    */
   detect?: boolean
   /** `detect` 时：alpha > 阈值视为前景，默认 128 */
   alphaThreshold?: number
   /** `detect` 时：面积小于此像素数的连通块丢弃，默认 4 */
   minRegionArea?: number
+  /**
+   * `detect` 时：前景二值图 Chebyshev 膨胀半径（像素），用于合并「同一帧内被细缝拆开的」连通块。
+   * 默认 `0` 不膨胀；例如 `1` 可合并中间隔 1 个透明像素的碎片。
+   */
+  detectMergeGap?: number
 }
 
 export interface SpriteRect {
@@ -141,16 +147,50 @@ export function computeFrames(
 }
 
 /**
- * 从配置得到帧名列表：有 spritesName 用其长度；否则用 count 生成 "0".."n-1"。
+ * `detect: true` 且未配置 `spritesName`、未配置有效 `count` 时，按图自动检测全部帧。
  */
-export function resolveFrameNames(input: SpriteGroupInput): string[] {
+export function resolveDetectAllFrames(input: SpriteGroupInput): boolean {
+  if (!input.detect) return false
+  if (input.spritesName != null && input.spritesName.length > 0) return false
+  if (input.count != null && Number.isFinite(input.count) && input.count >= 1) {
+    return false
+  }
+  return true
+}
+
+/** 帧名排序：纯数字键按数值序，否则按 localeCompare */
+export function sortFrameKeys(keys: string[]): string[] {
+  if (keys.length === 0) return []
+  const allNumeric = keys.every((k) => /^\d+$/.test(k))
+  if (allNumeric) {
+    return [...keys].sort((a, b) => Number(a) - Number(b))
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * 从配置得到帧名顺序列表。
+ * `detect` 且「全部自动检测」时须传入已构建的 `built`，从 `built.frames` 取键。
+ */
+export function resolveFrameNames(
+  input: SpriteGroupInput,
+  built?: { frames: SpriteFrames }
+): string[] {
+  if (resolveDetectAllFrames(input)) {
+    if (!built?.frames) {
+      throw new Error(
+        '[hyp-sprites-img] resolveFrameNames: detect-all mode requires `built` with frames'
+      )
+    }
+    return sortFrameKeys(Object.keys(built.frames))
+  }
   if (input.spritesName != null && input.spritesName.length > 0) {
     return [...input.spritesName]
   }
   const count = input.count
   if (count == null || !Number.isFinite(count) || count < 1) {
     throw new Error(
-      '[hyp-sprites-img] Provide `spritesName` (non-empty) or `count` (>= 1)'
+      '[hyp-sprites-img] Provide `spritesName` (non-empty) or `count` (>= 1), or use `detect: true` without both to auto-detect all regions'
     )
   }
   return Array.from({ length: Math.floor(count) }, (_, i) => String(i))

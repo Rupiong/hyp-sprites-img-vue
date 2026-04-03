@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
+import { hypSpritesImgCom } from "hyp-sprites-img/vue";
 </script>
 
 <template>
@@ -7,13 +7,16 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
     <header class="header">
       <h1>hyp-sprites-img</h1>
       <p class="lead">
-        通过 Vite 插件生成 manifest，用组件按「组名 <code>name</code>」+「帧名或序号
+        通过 Vite 插件生成 manifest，用组件按「组名
+        <code>name</code>」+「帧名或序号
         <code>spritesName</code>」显示雪碧图局部。
       </p>
     </header>
 
     <section class="section">
-      <h2>sprites1 — 命名帧（<code>spritesName: button | custom | logo</code>）</h2>
+      <h2>
+        sprites1 — 命名帧（<code>spritesName: button | custom | logo</code>）
+      </h2>
       <p class="hint">连通域自上而下、自左而右与配置中的名称一一对应。</p>
       <div class="row">
         <figure class="cell">
@@ -44,16 +47,31 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
     </section>
 
     <section class="section">
-      <h2>sprites2 — 序号帧（<code>spritesName: "0" | "1"</code>）</h2>
-      <p class="hint">未配置 <code>spritesName</code> 时使用 <code>count</code>，帧名为字符串 <code>"0"</code>…。</p>
+      <h2>
+        sprites2 — 自动检测全部帧（<code>sprites-name: "0"</code
+        >、<code>"1"</code>…）
+      </h2>
+      <p class="hint">
+        <code>detect: true</code> 且省略 <code>count</code> /
+        <code>spritesName</code> 时，manifest 包含全部连通块。
+      </p>
       <div class="row">
         <figure class="cell">
           <figcaption>spritesName="0"</figcaption>
-          <hypSpritesImgCom name="sprites2" sprites-name="0" height="30px" class="thumb bordered" />
+          <hypSpritesImgCom
+            name="sprites2"
+            sprites-name="0"
+            height="30px"
+            class="thumb bordered"
+          />
         </figure>
         <figure class="cell">
           <figcaption>spritesName="1"</figcaption>
-          <hypSpritesImgCom name="sprites2" sprites-name="1" class="thumb bordered" />
+          <hypSpritesImgCom
+            name="sprites2"
+            sprites-name="1"
+            class="thumb bordered"
+          />
         </figure>
       </div>
     </section>
@@ -95,9 +113,29 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 
     <section class="section">
       <h2>默认组</h2>
-      <p class="hint">省略 <code>name</code> 时使用配置中的第一组（此处为 <code>sprites1</code>）。</p>
+      <p class="hint">
+        省略 <code>name</code> 时使用配置中的第一组（此处为
+        <code>sprites1</code>）。
+      </p>
       <hypSpritesImgCom sprites-name="logo" class="thumb bordered" />
     </section>
+
+    <hypSpritesImgCom name="sprites2" sprites-name="0" />
+
+    <div
+      style="
+        width: fit-content;
+        height: 100px;
+        border: 1px solid red;
+        display: flex;
+      "
+    >
+      <hypSpritesImgCom
+        name="app_icon"
+        sprites-name="17"
+        height="100%"
+      />
+    </div>
   </div>
 </template>
 
@@ -106,7 +144,10 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 20px 48px;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   color: #1a1a1a;
   line-height: 1.5;
 }

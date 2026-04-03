@@ -5,6 +5,7 @@ import { detectSpriteFramesFromFile } from './detectSprites.js'
 import { ensureRemoteSpriteCached, isRemoteSpriteUrl } from './remote-cache.js'
 import {
   computeFrames,
+  resolveDetectAllFrames,
   resolveFrameNames,
   validateUniqueNames,
   type Layout,
@@ -102,7 +103,7 @@ export async function buildSpriteGroups(
     const abs = await resolveSpriteFsPath(resolve, root, g.url)
     deps.push(abs)
 
-    const names = resolveFrameNames(g)
+    const names = resolveDetectAllFrames(g) ? [] : resolveFrameNames(g)
 
     let imageWidth: number
     let imageHeight: number
@@ -112,6 +113,7 @@ export async function buildSpriteGroups(
       const d = await detectSpriteFramesFromFile(abs, names, {
         alphaThreshold: g.alphaThreshold,
         minRegionArea: g.minRegionArea,
+        detectMergeGap: g.detectMergeGap,
       })
       imageWidth = d.width
       imageHeight = d.height

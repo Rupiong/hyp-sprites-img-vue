@@ -46,7 +46,7 @@ export function buildPreviewSections(
   }> = []
 
   for (const { config, built, imageUrl } of groups) {
-    const order = resolveFrameNames(config)
+    const order = resolveFrameNames(config, built)
     const items: Array<{ frameKey: string; styleAttr: string }> = []
     for (const frameKey of order) {
       const rect = built.frames[frameKey]

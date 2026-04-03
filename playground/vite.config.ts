@@ -20,18 +20,29 @@ export default defineConfig({
           url: path.resolve(__dirname, "/src/assets/css_sprites2.png"),
           name: "sprites1",
           detect: true,
-          spritesName: ["button", "custom", "logo",'22'],
+          // spritesName: ["button", "custom", "logo",'22'],
           alphaThreshold: 128,
-          minRegionArea: 4,
+          minRegionArea: 10,
+          detectMergeGap:5
         },
-        /** 同一雪碧图：用 count 生成帧名 "0"、"1"…（与连通域顺序对应） */
+        /**
+         * 不写 count / spritesName：detect 自动导出全部连通块，帧名为 "0"…"n-1"。
+         */
         {
           url: 'https://tdesign.gtimg.com/site/brand/wechat-pay.png',
           name: "sprites2",
           detect: true,
-          count: 1,
           alphaThreshold: 128,
           minRegionArea: 4,
+          detectMergeGap: 20,
+        },
+        {
+          url: path.resolve(__dirname, "/src/assets/css_sprites_icon.png"),
+          name: "app_icon",
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+          detectMergeGap: 4,
         },
       ],
       { 

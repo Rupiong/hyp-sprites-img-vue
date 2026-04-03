@@ -2,6 +2,8 @@
 
 **Language / 语言:** [简体中文](#简体中文) · [English](#english)
 
+npm 包名：`hyp-sprites-img`。本仓库为源码与示例 playground。
+
 ---
 
 ## 简体中文
@@ -36,7 +38,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 
 ### Vite 配置
 
-在 Vue 项目中需同时使用 `@vitejs/plugin-vue` 与本插件；`url` 可写相对项目根的路径，也可用 `path.resolve(__dirname, '…')`。
+在 Vue 项目中需同时使用 `@vitejs/plugin-vue` 与本插件；`url` 可为相对项目根的路径、`path.resolve` 的本地路径，或 **`http://` / `https://` 远程地址**（构建时下载并缓存以量尺寸/做检测；打包后 manifest 中仍保留远程 URL，**不把整图打进产物**）。
 
 ```ts
 import path from 'node:path'
@@ -47,20 +49,42 @@ import { hypSpritesImg } from 'hyp-sprites-img'
 export default defineConfig({
   plugins: [
     vue(),
-    hypSpritesImg(
+        hypSpritesImg(
       [
         {
-          url: path.resolve(__dirname, 'src/assets/sprites.png'),
-          name: 'sprites1',
-          spritesName: ['button', 'custom'],
+          url: path.resolve(__dirname, "/src/assets/css_sprites2.png"),
+          name: "sprites1",
+          detect: true,
+          // spritesName: ["button", "custom", "logo",'22'],
+          alphaThreshold: 128,
+          minRegionArea: 10,
+          detectMergeGap:5
+        },
+        /**
+         * 不写 count / spritesName：detect 自动导出全部连通块，帧名为 "0"…"n-1"。
+         */
+        {
+          url: 'https://tdesign.gtimg.com/site/brand/wechat-pay.png',
+          name: "sprites2",
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+          detectMergeGap: 20,
         },
         {
-          url: path.resolve(__dirname, 'src/assets/other.png'),
-          name: 'sprites2',
-          count: 4,
-          layout: 'horizontal',
+          url: path.resolve(__dirname, "/src/assets/css_sprites_icon.png"),
+          name: "app_icon",
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+          detectMergeGap: 4,
         },
       ],
+      { 
+        preview: true,
+        // path:'/__hyp-sprites-img-preview',
+        // port: 5180,
+       }
     ) as PluginOption,
   ],
 })
@@ -92,9 +116,9 @@ export default defineConfig({
 - 也可传入对象：`{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`。`path` 为挂载在当前 dev 上的路径；`port` 为可选的**额外端口**，仅在该端口提供同一预览页，整图资源仍从主 dev 地址加载。
 - **不适用于** `vite build` / `vite preview` 产物；仅本地开发时有效。
 
-**界面示意**（仓库根目录 [`demo.png`](https://github.com/Rupiong/hyp-sprites-img-vue/blob/main/demo.png)）：
+**界面示意**（若仓库根目录包含 [`demo.png`](./demo.png)）：
 
-![hyp-sprites-img 雪碧图预览页：按组展示整图、每帧缩略图与可复制代码](https://github.com/Rupiong/hyp-sprites-img-vue/blob/main/demo.png)
+![hyp-sprites-img 雪碧图预览页：按组展示整图、每帧缩略图与可复制代码](./demo.png)
 
 **使用步骤**
 
@@ -114,14 +138,15 @@ export default defineConfig({
 
 | 字段 | 说明 |
 |------|------|
-| `url` | 雪碧图路径（相对项目根或可被 Vite 解析的路径；也支持绝对路径） |
+| `url` | 雪碧图地址：本地（相对项目根、可被 Vite 解析的路径或绝对路径），或 `http(s)://` 远程 URL（见上文） |
 | `name` | 组 id，在组件里用 `name` 对应；**全局唯一** |
 | `spritesName` | 可选。每帧名称数组，顺序与切分顺序一致；**帧数 N = 数组长度** |
-| `count` | 未提供 `spritesName` 时**必填**。帧名自动为 `"0"`, `"1"`, … |
+| `count` | 未提供 `spritesName` 时**必填**（`detect: true` 且两者都省略时除外，见连通域一节）。帧名自动为 `"0"`, `"1"`, … |
 | `layout` | 可选。省略时按整图比例**自动推断**：宽 ≥ 高（含正方形）为 `horizontal`；高 > 宽为 `vertical`。也可显式写 `horizontal` / `vertical` / `{ type: 'grid', rows, cols }`（网格**先行后列**） |
 | `detect` | 为 `true` 时启用**连通域检测**（见下文），不再使用 `layout` 等分 |
 | `alphaThreshold` | 仅 `detect`：`alpha > 阈值` 视为前景，默认 `128` |
 | `minRegionArea` | 仅 `detect`：面积小于该像素数的连通块忽略，默认 `4`（过滤噪点） |
+| `detectMergeGap` | 仅 `detect`：前景二值图 Chebyshev 膨胀半径（像素），用于合并「同一帧内被细缝拆开的」连通块；默认 `0` 不膨胀，例如 `1` 可合并间隔 1 个透明像素的碎片 |
 
 #### 连通域自动检测（`detect: true`）
 
@@ -131,9 +156,10 @@ export default defineConfig({
 2. **四连通** flood fill 标记每个连通域。  
 3. 对每个连通域计算**外接矩形**（`x, y, width, height`）。  
 4. 按**先上后下、再先左后右**（外接矩形左上角 `(y, x)`）排序。  
-5. 与 `spritesName`（或 `count` 生成的 `"0"…`）**按顺序一一对应**；检测到的有效连通块数量必须 **≥** 名称个数。
+5. 与 `spritesName`（或 `count` 生成的 `"0"…`）**按顺序一一对应**；检测到的有效连通块数量必须 **≥** 名称个数。  
+6. 若 **`spritesName` 与 `count` 均未配置**，则自动包含**全部**检测到的区域，帧名为 `"0"` … `"n-1"`。
 
-适用于小图之间**透明背景**分隔的雪碧图；整张不透明、或块之间像素相连会连成一个大域，需改图或仍用等分 `layout`。
+适用于小图之间**透明背景**分隔的雪碧图；整张不透明、或块之间像素相连会连成一个大域，需改图或仍用等分 `layout`。抗锯齿可能导致边缘碎块，可调 `alphaThreshold` / `minRegionArea` / `detectMergeGap`。
 
 #### 布局规则（等分，`detect` 未开启时）
 
@@ -150,7 +176,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 </script>
 
 <template>
-  <hypSpritesImgCom name="sprites1" spritesName="button" width="100px" height="100px" />
+  <hypSpritesImgCom name="sprites1" sprites-name="button" width="100px" height="100px" />
 </template>
 ```
 
@@ -160,7 +186,8 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 |------|------|
 | `name` | 对应配置里的 `name`；**不传则使用配置数组中的第一组** |
 | `spritesName` | 小图名称，或 index 字符串（如 `"0"`）；**不传则默认为 `"0"`（第一帧）** |
-| `width` / `height` | 可选。不传则使用 manifest 中该帧的宽高；只传一边时按比例缩放另一边；都传则按给定值拉伸 |
+| `width` / `height` | 可选。不传则使用 manifest 中该帧的宽高；只传一边时按比例缩放另一边；都传则按给定值拉伸；支持百分比 |
+| `positionX` / `positionY` | 可选。覆盖 `background-position` 的 X/Y（px），用于与 manifest 坐标有偏差时微调 |
 
 ### TypeScript
 
@@ -173,8 +200,18 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 ### 限制与说明
 
 - **等分模式**：按 `layout` / 默认推断切矩形。  
-- **`detect` 模式**：依赖透明分隔与阈值，极端抗锯齿可能导致边缘碎块，可调 `alphaThreshold` / `minRegionArea`。  
-- 构建期仅解析**本地可解析**的 `url`。
+- **`detect` 模式**：依赖透明分隔与阈值；极端抗锯齿可能导致边缘碎块，可调 `alphaThreshold` / `minRegionArea` / `detectMergeGap`。  
+- **本地 `url`**：需在项目根内可被 Vite 解析。**远程 `url`**：构建时联网下载并缓存；产物中 manifest 保留远程地址，整图不随 bundle 输出。
+
+### 开发本仓库
+
+```bash
+npm install
+npm run build
+cd playground && npm install && npm run dev
+```
+
+`playground` 通过 `file:..` 依赖本地包，便于联调插件与组件。
 
 ### 许可证
 
@@ -185,6 +222,8 @@ MIT，见 [LICENSE](./LICENSE)。
 ## English
 
 A **Vite** + **Vue 3** sprite sheet tool: at build time it emits **static** per-frame `x / y / width / height` from the full image and layout rules; at runtime a Vue component renders each frame with `background-position` / `background-size`.
+
+npm package: `hyp-sprites-img`. This repo holds the source and a `playground` app.
 
 ### What it offers
 
@@ -213,7 +252,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 
 ### Vite configuration
 
-In a Vue app, use `@vitejs/plugin-vue` together with this plugin. `url` may be relative to the project root or `path.resolve(__dirname, '…')`.
+In a Vue app, use `@vitejs/plugin-vue` together with this plugin. `url` may be a path relative to the project root, `path.resolve(…)`, or a remote **`http://` / `https://`** URL (downloaded and cached at build for sizing/detection; the **manifest keeps the remote URL** and the **image is not bundled** into the output).
 
 ```ts
 import path from 'node:path'
@@ -269,7 +308,7 @@ export default defineConfig({
 - Object form: `{ preview: { path: '/__hyp-sprites-img-preview', port: 5180 } }`. `path` is mounted on the current dev server; optional `port` serves the same preview on an extra port (assets still load from the main dev origin).
 - **Not** for `vite build` / `vite preview` output—dev only.
 
-**Screenshot** ([`demo.png`](./demo.png) at repo root):
+**Screenshot** (if [`demo.png`](./demo.png) exists at repo root):
 
 ![hyp-sprites-img dev preview: groups, per-frame thumbs, full sheet, copy actions](./demo.png)
 
@@ -291,14 +330,15 @@ export default defineConfig({
 
 | Field | Description |
 |-------|-------------|
-| `url` | Sprite image path (relative to project root or any path Vite can resolve; absolute paths supported) |
+| `url` | Sprite image: local path (project root–relative, Vite-resolvable, or absolute) or `http(s)://` remote URL (see above) |
 | `name` | Group id, matched by the component `name` prop; **must be unique** |
 | `spritesName` | Optional. Per-frame names in split order; **frame count N = array length** |
-| `count` | **Required** if `spritesName` is omitted. Frame names become `"0"`, `"1"`, … |
+| `count` | **Required** if `spritesName` is omitted (**except** when `detect: true` and both are omitted—see detection section). Frame names become `"0"`, `"1"`, … |
 | `layout` | Optional. If omitted, **inferred** from aspect ratio: width ≥ height → `horizontal`; height &gt; width → `vertical`. Or set `horizontal` / `vertical` / `{ type: 'grid', rows, cols }` (**row-major** grid) |
 | `detect` | If `true`, **connected-component detection** (see below); equal-split `layout` is not used |
 | `alphaThreshold` | Only with `detect`: pixels with `alpha > threshold` count as foreground; default `128` |
 | `minRegionArea` | Only with `detect`: ignore connected regions smaller than this many pixels; default `4` (noise) |
+| `detectMergeGap` | Only with `detect`: Chebyshev dilation radius on the binary mask to merge regions split by a thin gap; default `0` (off); e.g. `1` merges regions 1 transparent pixel apart |
 
 #### Connected-component detection (`detect: true`)
 
@@ -308,9 +348,10 @@ At build time [sharp](https://sharp.pixelplumbing.com/) decodes the image to **R
 2. **4-connected** flood fill labels each region.  
 3. Bounding box per region (`x, y, width, height`).  
 4. Sort **top-to-bottom, then left-to-right** (by top-left `(y, x)`).  
-5. Align with `spritesName` (or `"0"…` from `count`) in order; the number of valid regions must be **≥** the number of names.
+5. Align with `spritesName` (or `"0"…` from `count`) in order; the number of valid regions must be **≥** the number of names.  
+6. If **neither** `spritesName` **nor** `count` is set, **all** detected regions are included, named `"0"` … `"n-1"`.
 
-Best for sprites separated by **transparent** gaps; a fully opaque sheet or touching regions merge—fix the artwork or use equal-split `layout`.
+Best for sprites separated by **transparent** gaps; a fully opaque sheet or touching regions merge—fix the artwork or use equal-split `layout`. Heavy anti-aliasing may leave edge fragments—tune `alphaThreshold` / `minRegionArea` / `detectMergeGap`.
 
 #### Layout rules (equal split when `detect` is off)
 
@@ -327,7 +368,7 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 </script>
 
 <template>
-  <hypSpritesImgCom name="sprites1" spritesName="button" width="100px" height="100px" />
+  <hypSpritesImgCom name="sprites1" sprites-name="button" width="100px" height="100px" />
 </template>
 ```
 
@@ -337,7 +378,8 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 |------|-------------|
 | `name` | Matches config `name`; **if omitted, the first group in the config array is used** |
 | `spritesName` | Frame name or index string (e.g. `"0"`); **defaults to `"0"` (first frame)** if omitted |
-| `width` / `height` | Optional. Omitted → manifest width/height; one side only → scale the other proportionally; both → stretch to those values |
+| `width` / `height` | Optional. Omitted → manifest width/height; one side only → scale the other proportionally; both → stretch to those values; percentages supported |
+| `positionX` / `positionY` | Optional. Override `background-position` X/Y in px when you need a small correction |
 
 ### TypeScript
 
@@ -350,8 +392,18 @@ Reference the virtual module types in `env.d.ts` or `vite-env.d.ts`:
 ### Limitations
 
 - **Equal split**: rectangles come from `layout` / default inference.  
-- **`detect` mode**: depends on transparency and thresholds; heavy anti-aliasing may leave edge fragments—tune `alphaThreshold` / `minRegionArea`.  
-- Build resolves only **locally resolvable** `url` values.
+- **`detect` mode**: depends on transparency and thresholds; heavy anti-aliasing may leave edge fragments—tune `alphaThreshold` / `minRegionArea` / `detectMergeGap`.  
+- **Local `url`**: must resolve under the project for Vite. **Remote `url`**: fetched at build time and cached; the manifest keeps the remote URL and the image is not emitted inside the bundle.
+
+### Developing this repo
+
+```bash
+npm install
+npm run build
+cd playground && npm install && npm run dev
+```
+
+The playground depends on the package via `file:..` for local integration testing.
 
 ### License
 

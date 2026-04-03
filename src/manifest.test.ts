@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   computeFrames,
   inferDefaultLayout,
+  resolveDetectAllFrames,
   resolveFrameNames,
+  sortFrameKeys,
 } from './manifest.js'
 
 describe('computeFrames', () => {
@@ -73,5 +75,30 @@ describe('resolveFrameNames', () => {
         count: 3,
       })
     ).toEqual(['0', '1', '2'])
+  })
+
+  it('detect-all: requires built frames', () => {
+    expect(
+      resolveDetectAllFrames({
+        url: 'x',
+        name: 'g',
+        detect: true,
+      })
+    ).toBe(true)
+    expect(() =>
+      resolveFrameNames({ url: 'x', name: 'g', detect: true })
+    ).toThrow(/requires `built`/)
+    expect(
+      resolveFrameNames(
+        { url: 'x', name: 'g', detect: true },
+        { frames: { '1': { x: 0, y: 0, width: 1, height: 1 }, '0': { x: 1, y: 0, width: 1, height: 1 } } }
+      )
+    ).toEqual(['0', '1'])
+  })
+})
+
+describe('sortFrameKeys', () => {
+  it('sorts numeric string keys numerically', () => {
+    expect(sortFrameKeys(['10', '2', '1'])).toEqual(['1', '2', '10'])
   })
 })

@@ -2,6 +2,7 @@ export {
   buildForegroundMask,
   detectSpriteFramesFromFile,
   detectSpriteFramesFromRgba,
+  dilateMaskChebyshev,
   labelConnectedComponents,
   loadRgbaFromFile,
   sortBoxesTopLeft,
@@ -12,7 +13,9 @@ export {
 export {
   computeFrames,
   inferDefaultLayout,
+  resolveDetectAllFrames,
   resolveFrameNames,
+  sortFrameKeys,
   validateUniqueNames,
   type Layout,
   type SpriteGroupInput,
