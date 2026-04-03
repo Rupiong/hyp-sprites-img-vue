@@ -10,12 +10,21 @@ npm 包名：`hyp-sprites-img`。本仓库为源码与示例 playground。
 
 基于 **Vite** 与 **Vue 3** 的雪碧图（精灵图）工具：在构建期根据整图尺寸与布局规则生成**静态**的每帧 `x / y / width / height`，运行时通过 Vue 组件用 `background-position` / `background-size` 展示单帧。
 
+### 功能概览
+
+| 能力 | 说明 |
+|------|------|
+| **远程雪碧图** | `url` 支持 `http(s)://`：构建期下载并缓存以量尺寸/做检测；manifest 保留远程地址，**整图不打进 bundle**。 |
+| **开发预览** | 第二参数 `preview: true`（或对象）在 `vite dev` 下提供「组 × 帧」预览与复制片段；**仅开发态**，不参与 `build` 产物。 |
+| **连通域检测** | `detect: true` 时按透明区分小图；可选 `detectMergeGap`（Chebyshev 膨胀）合并被细缝拆开的块；不写 `spritesName`/`count` 时可**自动导出全部区域**，帧名 `"0"`…`"n-1"`。 |
+| **组件展示** | `width`/`height` 支持 px、数字与**百分比**（百分比时按元素实际尺寸换算背景）；`positionX`/`positionY` 可微调 `background-position`（px）；支持透传 `class` 与合并 `style`。 |
+
 ### 能为项目带来什么
 
 - **减少请求与体积策略**：多张 UI 小图合并为一张雪碧图，浏览器只需加载一次图片资源，有利于控制网络请求数量与缓存策略（整图可被长期缓存）。
 - **坐标在构建期算好，运行时零推导**：每帧的矩形在打包时写入 manifest，页面里只按名称取图，无需在客户端用 Canvas 量图或手写大量 `background-position` 魔法数字，逻辑更清晰、行为可预测。
 - **声明式使用，维护成本低**：通过 `<hypSpritesImgCom>` 按 `name` / `spritesName` 切换帧，换图或改布局时主要改构建配置与资源，减少散落各处的 CSS 片段。
-- **布局方式灵活**：支持横/竖等分、网格，以及基于透明背景的**连通域检测**，能适应规则排布与不规则雪碧图两类常见需求。
+- **布局方式灵活**：支持横/竖等分、网格，以及基于透明背景的**连通域检测**（含缝隙合并与全量导出），能适应规则排布与不规则雪碧图两类常见需求。
 - **开发体验**：可选开启雪碧图预览页，在本地快速核对所有组与帧，并复制组件片段，降低联调与排错成本。
 - **与 Vite / Vue 生态对齐**：以 Vite 插件注入虚拟模块，配合 `hyp-sprites-img/virtual` 可做 TypeScript 类型提示，与 Vue 3 组合式用法一致。
 
@@ -49,42 +58,42 @@ import { hypSpritesImg } from 'hyp-sprites-img'
 export default defineConfig({
   plugins: [
     vue(),
-        hypSpritesImg(
+    hypSpritesImg(
       [
         {
-          url: path.resolve(__dirname, "/src/assets/css_sprites2.png"),
-          name: "sprites1",
+          url: path.resolve(__dirname, 'src/assets/css_sprites2.png'),
+          name: 'sprites1',
           detect: true,
-          // spritesName: ["button", "custom", "logo",'22'],
+          // spritesName: ['button', 'custom', 'logo'],
           alphaThreshold: 128,
           minRegionArea: 10,
-          detectMergeGap:5
+          detectMergeGap: 5,
         },
         /**
          * 不写 count / spritesName：detect 自动导出全部连通块，帧名为 "0"…"n-1"。
          */
         {
           url: 'https://tdesign.gtimg.com/site/brand/wechat-pay.png',
-          name: "sprites2",
+          name: 'sprites2',
           detect: true,
           alphaThreshold: 128,
           minRegionArea: 4,
           detectMergeGap: 20,
         },
         {
-          url: path.resolve(__dirname, "/src/assets/css_sprites_icon.png"),
-          name: "app_icon",
+          url: path.resolve(__dirname, 'src/assets/css_sprites_icon.png'),
+          name: 'app_icon',
           detect: true,
           alphaThreshold: 128,
           minRegionArea: 4,
           detectMergeGap: 4,
         },
       ],
-      { 
+      {
         preview: true,
-        // path:'/__hyp-sprites-img-preview',
+        // path: '/__hyp-sprites-img-preview',
         // port: 5180,
-       }
+      },
     ) as PluginOption,
   ],
 })
@@ -186,8 +195,10 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 |------|------|
 | `name` | 对应配置里的 `name`；**不传则使用配置数组中的第一组** |
 | `spritesName` | 小图名称，或 index 字符串（如 `"0"`）；**不传则默认为 `"0"`（第一帧）** |
-| `width` / `height` | 可选。不传则使用 manifest 中该帧的宽高；只传一边时按比例缩放另一边；都传则按给定值拉伸；支持百分比 |
-| `positionX` / `positionY` | 可选。覆盖 `background-position` 的 X/Y（px），用于与 manifest 坐标有偏差时微调 |
+| `width` / `height` | 可选。不传则使用 manifest 中该帧的宽高；只传一边时按比例缩放另一边；都传则按给定值拉伸；支持 `px`、数字与**百分比**（如 `50%`）。百分比时组件用 `ResizeObserver` 读取元素布局尺寸并换算 `background-size`，随父级尺寸变化 |
+| `positionX` / `positionY` | 可选。覆盖 `background-position` 的 X/Y（**px**），用于与 manifest 坐标有偏差时微调 |
+
+组件使用 `inheritAttrs: false`：可向根节点透传 `class`、原生属性等；`style` 与内部样式**合并**，后者写在后，便于覆盖 `width`/`height` 等。
 
 ### TypeScript
 
@@ -225,12 +236,21 @@ A **Vite** + **Vue 3** sprite sheet tool: at build time it emits **static** per-
 
 npm package: `hyp-sprites-img`. This repo holds the source and a `playground` app.
 
+### At a glance
+
+| Capability | Notes |
+|------------|--------|
+| **Remote sprites** | `url` may be `http(s)://`: downloaded and cached at build for sizing/detection; manifest keeps the remote URL; the **image is not bundled**. |
+| **Dev preview** | Second argument `preview: true` (or an object) serves a group × frame preview under `vite dev` with copy actions; **dev only**, not part of `build` output. |
+| **Detection** | With `detect: true`, optional `detectMergeGap` (Chebyshev dilation) merges regions split by a thin gap. If **both** `spritesName` and `count` are omitted, **all** regions are exported as `"0"`…`"n-1"`. |
+| **Component** | `width`/`height` accept px, numbers, or **percent** (percent uses the element’s laid-out size); `positionX`/`positionY` tweak `background-position` (px); `class` passthrough and merged `style`. |
+
 ### What it offers
 
 - **Fewer requests & caching**: Many small UI images merge into one sprite; the browser loads it once, which helps with request count and long-lived caching of the whole sheet.
 - **Coordinates at build time, no runtime math**: Frame rectangles go into the manifest at build; the page only looks up by name—no Canvas probing or hand-written `background-position` numbers.
 - **Declarative usage**: Use `<hypSpritesImgCom>` with `name` / `spritesName`; when art or layout changes, mostly update config and assets.
-- **Flexible layout**: Horizontal/vertical equal splits, grid, and **connected-component detection** on transparency—for both regular grids and irregular sprites.
+- **Flexible layout**: Horizontal/vertical equal splits, grid, and **connected-component detection** (including gap merge and export-all)—for both regular grids and irregular sprites.
 - **Developer experience**: Optional dev preview page to verify groups/frames and copy snippets.
 - **Vite / Vue aligned**: Vite plugin + virtual module; `hyp-sprites-img/virtual` for TypeScript; matches Vue 3 Composition API usage.
 
@@ -266,17 +286,36 @@ export default defineConfig({
     hypSpritesImg(
       [
         {
-          url: path.resolve(__dirname, 'src/assets/sprites.png'),
+          url: path.resolve(__dirname, 'src/assets/css_sprites2.png'),
           name: 'sprites1',
-          spritesName: ['button', 'custom'],
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 10,
+          detectMergeGap: 5,
+        },
+        /** Omit both count and spritesName: detect exports every region as "0"…"n-1". */
+        {
+          url: 'https://tdesign.gtimg.com/site/brand/wechat-pay.png',
+          name: 'sprites2',
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+          detectMergeGap: 20,
         },
         {
-          url: path.resolve(__dirname, 'src/assets/other.png'),
-          name: 'sprites2',
-          count: 4,
-          layout: 'horizontal',
+          url: path.resolve(__dirname, 'src/assets/css_sprites_icon.png'),
+          name: 'app_icon',
+          detect: true,
+          alphaThreshold: 128,
+          minRegionArea: 4,
+          detectMergeGap: 4,
         },
       ],
+      {
+        preview: true,
+        // path: '/__hyp-sprites-img-preview',
+        // port: 5180,
+      },
     ) as PluginOption,
   ],
 })
@@ -378,8 +417,10 @@ import { hypSpritesImgCom } from 'hyp-sprites-img/vue'
 |------|-------------|
 | `name` | Matches config `name`; **if omitted, the first group in the config array is used** |
 | `spritesName` | Frame name or index string (e.g. `"0"`); **defaults to `"0"` (first frame)** if omitted |
-| `width` / `height` | Optional. Omitted → manifest width/height; one side only → scale the other proportionally; both → stretch to those values; percentages supported |
-| `positionX` / `positionY` | Optional. Override `background-position` X/Y in px when you need a small correction |
+| `width` / `height` | Optional. Omitted → manifest width/height; one side only → scale the other proportionally; both → stretch to those values; `px`, numbers, or **percent** (e.g. `50%`). For percent, the component uses `ResizeObserver` on the element to drive `background-size` |
+| `positionX` / `positionY` | Optional. Override `background-position` X/Y (**px**) when coordinates need a small correction |
+
+The component uses `inheritAttrs: false`: pass `class`, native attributes, etc. to the root; `style` is **merged** with internal styles (user style last so it can override `width`/`height` and similar).
 
 ### TypeScript
 
