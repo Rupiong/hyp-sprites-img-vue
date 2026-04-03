@@ -6,7 +6,7 @@
     "email": "83470005@qq.com",
     "url": "https://github.com/Rupiong"
   },
-  "description": "Vite plugin + Vue 3 component for CSS sprite sheets (static frame rects at build time)",
+  "description": "基于 Vue 3 + Vite 的雪碧图工具：构建期生成每帧坐标，支持远程图、网格与透明区检测，告别手写 background-position。",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

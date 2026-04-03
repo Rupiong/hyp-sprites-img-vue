@@ -188,6 +188,8 @@ export function hypSpritesImg(
 
   return {
     name: 'hyp-sprites-img',
+    /** 尽量早于 Vue / SPA 回退中间件注册预览路由，避免被 index.html 抢占 */
+    enforce: 'pre',
     config() {
       return {
         optimizeDeps: {
@@ -299,7 +301,11 @@ export function hypSpritesImg(
         return html
       }
 
-      server.middlewares.use((req, res, next) => {
+      const previewMiddleware = (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        next: (err?: unknown) => void
+      ) => {
         const url = req.url?.split('?')[0] ?? ''
         if (req.method !== 'GET' || url !== previewPathFull) {
           return next()
@@ -318,7 +324,16 @@ export function hypSpritesImg(
             )
           }
         })()
-      })
+      }
+
+      const mw = server.middlewares as unknown as {
+        stack?: Array<{ route: string; handle: typeof previewMiddleware }>
+      }
+      if (Array.isArray(mw.stack)) {
+        mw.stack.unshift({ route: '', handle: previewMiddleware })
+      } else {
+        server.middlewares.use(previewMiddleware)
+      }
 
       const logPreview = () => {
         try {
@@ -345,8 +360,15 @@ export function hypSpritesImg(
         const protocol = server.config.server.https ? 'https' : 'http'
         const origin = `${protocol}://127.0.0.1:${mainPort}`
 
+        const extraPreviewPaths = new Set<string>([
+          '/',
+          previewPathRel,
+          previewPathFull,
+        ])
+
         previewServer = http.createServer((req, res) => {
-          if (req.method !== 'GET' || req.url?.split('?')[0] !== '/') {
+          const pathname = req.url?.split('?')[0] ?? ''
+          if (req.method !== 'GET' || !extraPreviewPaths.has(pathname)) {
             res.statusCode = 404
             res.end()
             return
@@ -370,8 +392,9 @@ export function hypSpritesImg(
         })
 
         previewServer.listen(port, () => {
+          const baseUrl = `${protocol}://127.0.0.1:${port}`
           console.log(
-            `[hyp-sprites-img] 雪碧图预览（独立端口）: ${protocol}://127.0.0.1:${port}/`
+            `[hyp-sprites-img] 雪碧图预览（独立端口）: ${baseUrl}/ 或 ${baseUrl}${previewPathRel}`
           )
         })
 
