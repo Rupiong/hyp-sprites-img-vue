@@ -1,5 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite'
 import type { PluginContext } from 'rollup'
 import {
@@ -10,10 +12,10 @@ import {
 import { isRemoteSpriteUrl } from './remote-cache.js'
 import {
   buildPreviewSections,
-  renderPreviewHtml,
   type PreviewPageGroupInput,
 } from './preview-page.js'
 import type { SpriteGroupInput } from './manifest.js'
+import type { PreviewSection } from './preview/preview-types.js'
 
 export const VIRTUAL_ID = '\0virtual:hyp-sprites-img'
 export const RESOLVED_VIRTUAL_ID = 'virtual:hyp-sprites-img'
@@ -63,7 +65,35 @@ function normalizeBasePath(base: string): string {
   return base.endsWith('/') ? base.slice(0, -1) : base
 }
 
-/** 与 Vite `req.url`（base 前缀未剥离时）及日志 URL 一致 */
+type PreviewSsrModule = {
+  renderPreviewHtmlDocument: (
+    sections: PreviewSection[],
+    options: { clientScriptSrc: string }
+  ) => Promise<string>
+}
+
+let previewSsrModule: PreviewSsrModule | null = null
+
+async function loadPreviewSsrModule(): Promise<PreviewSsrModule> {
+  if (previewSsrModule) return previewSsrModule
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const ssrPath = path.join(here, 'preview-ssr.mjs')
+  if (!existsSync(ssrPath)) {
+    throw new Error(
+      '[hyp-sprites-img] 未找到 preview-ssr.mjs，请先在本包根目录执行 npm run build'
+    )
+  }
+  const mod = (await import(
+    pathToFileURL(ssrPath).href
+  )) as PreviewSsrModule
+  previewSsrModule = mod
+  return mod
+}
+
+function previewClientBundlePath(): string {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), 'preview-client.mjs')
+}
+
 function previewPathWithBase(base: string, previewPath: string): string {
   const p = previewPath.startsWith('/') ? previewPath : `/${previewPath}`
   const b = normalizeBasePath(base)
@@ -229,6 +259,7 @@ export function hypSpritesImg(
       const invalidatePreviewCache = () => {
         previewHtmlCache = null
         previewCacheKey = ''
+        previewSsrModule = null
       }
 
       server.watcher.on('all', (_event, filePath) => {
@@ -295,10 +326,39 @@ export function hypSpritesImg(
         }
 
         const sections = buildPreviewSections(pageInputs)
-        const html = renderPreviewHtml(sections)
+        const { renderPreviewHtmlDocument } = await loadPreviewSsrModule()
+        const clientScriptSrc = `${previewPathFull.replace(/\/$/, '')}/preview-client.mjs`
+        const html = await renderPreviewHtmlDocument(sections, {
+          clientScriptSrc,
+        })
         previewHtmlCache = html
         previewCacheKey = key
         return html
+      }
+
+      const previewClientPathFull = `${previewPathFull.replace(/\/$/, '')}/preview-client.mjs`
+
+      const previewClientMiddleware = (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        next: (err?: unknown) => void
+      ) => {
+        const url = req.url?.split('?')[0] ?? ''
+        if (req.method !== 'GET' || url !== previewClientPathFull) {
+          return next()
+        }
+        const fp = previewClientBundlePath()
+        if (!existsSync(fp)) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end(
+            '[hyp-sprites-img] preview-client.mjs 缺失，请先在本包根目录执行 npm run build'
+          )
+          return
+        }
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
+        res.end(readFileSync(fp, 'utf-8'))
       }
 
       const previewMiddleware = (
@@ -326,12 +386,20 @@ export function hypSpritesImg(
         })()
       }
 
+      type Mw = (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        next: (err?: unknown) => void
+      ) => void
+
       const mw = server.middlewares as unknown as {
-        stack?: Array<{ route: string; handle: typeof previewMiddleware }>
+        stack?: Array<{ route: string; handle: Mw }>
       }
       if (Array.isArray(mw.stack)) {
         mw.stack.unshift({ route: '', handle: previewMiddleware })
+        mw.stack.unshift({ route: '', handle: previewClientMiddleware })
       } else {
+        server.middlewares.use(previewClientMiddleware)
         server.middlewares.use(previewMiddleware)
       }
 
@@ -368,7 +436,27 @@ export function hypSpritesImg(
 
         previewServer = http.createServer((req, res) => {
           const pathname = req.url?.split('?')[0] ?? ''
-          if (req.method !== 'GET' || !extraPreviewPaths.has(pathname)) {
+          if (req.method !== 'GET') {
+            res.statusCode = 404
+            res.end()
+            return
+          }
+          if (pathname === previewClientPathFull) {
+            const fp = previewClientBundlePath()
+            if (!existsSync(fp)) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+              res.end(
+                '[hyp-sprites-img] preview-client.mjs 缺失，请先在本包根目录执行 npm run build'
+              )
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
+            res.end(readFileSync(fp, 'utf-8'))
+            return
+          }
+          if (!extraPreviewPaths.has(pathname)) {
             res.statusCode = 404
             res.end()
             return

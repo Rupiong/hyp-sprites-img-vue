@@ -37,7 +37,7 @@
     "**/*.vue"
   ],
   "scripts": {
-    "build": "vite build && vue-tsc -p tsconfig.build.json --emitDeclarationOnly && cp src/virtual.d.ts dist/virtual.d.ts",
+    "build": "vite build && vite build -c vite.preview-ssr.config.ts && vite build -c vite.preview-client.config.ts && vue-tsc -p tsconfig.build.json --emitDeclarationOnly && cp src/virtual.d.ts dist/virtual.d.ts",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
@@ -56,6 +56,7 @@
     "vue": "^3.3.0"
   },
   "dependencies": {
+    "@vue/server-renderer": "^3.5.13",
     "image-size": "^1.1.1",
     "sharp": "^0.33.5"
   },
