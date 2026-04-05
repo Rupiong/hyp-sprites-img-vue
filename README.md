@@ -1,11 +1,12 @@
 # hyp-sprites-img
 
 [![npm](https://img.shields.io/npm/v/hyp-sprites-img.svg)](https://www.npmjs.com/package/hyp-sprites-img)
+[![GitHub](https://img.shields.io/badge/GitHub-Rupiong%2Fhyp--sprites--img--vue-181717?logo=github)](https://github.com/Rupiong/hyp-sprites-img-vue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
 **Language / 语言:** [简体中文](#简体中文) · [English](#english)
 
-npm 包名：`hyp-sprites-img`。本仓库为源码与示例 `playground`。
+npm 包名：`hyp-sprites-img`。源码与示例 `playground` 见仓库 [Rupiong/hyp-sprites-img-vue](https://github.com/Rupiong/hyp-sprites-img-vue)。
 
 ---
 
@@ -303,7 +304,7 @@ MIT，见 [LICENSE](./LICENSE)。
 
 A **Vite** + **Vue 3** sprite sheet tool: at build time it emits **static** per-frame `x / y / width / height`; at runtime a Vue component renders each frame with `background-position` / `background-size`.
 
-npm package: `hyp-sprites-img`. This repo contains the source and a `playground` app.
+npm package: `hyp-sprites-img`. Source and `playground` live in [Rupiong/hyp-sprites-img-vue](https://github.com/Rupiong/hyp-sprites-img-vue).
 
 ### Quick start
 
