@@ -21,10 +21,17 @@ export type PreviewPageGroupInput = {
   imageUrl: string
 }
 
-function vueSnippet(groupName: string, frameKey: string): string {
+function vueSnippet(
+  groupName: string,
+  frameKey: string,
+  posX: number,
+  posY: number
+): string {
   return `<hypSpritesImgCom
   name="${groupName}"
   sprites-name="${frameKey}"
+  :positionX="${posX}"
+  :positionY="${posY}"
 />`
 }
 
@@ -35,19 +42,34 @@ export function buildPreviewSections(
   imageUrl: string
   imageWidth: number
   imageHeight: number
-  items: Array<{ frameKey: string; styleAttr: string }>
+  items: Array<{
+    frameKey: string
+    styleAttr: string
+    defaultPosX: number
+    defaultPosY: number
+  }>
 }> {
   const sections: Array<{
     name: string
     imageUrl: string
     imageWidth: number
     imageHeight: number
-    items: Array<{ frameKey: string; styleAttr: string }>
+    items: Array<{
+      frameKey: string
+      styleAttr: string
+      defaultPosX: number
+      defaultPosY: number
+    }>
   }> = []
 
   for (const { config, built, imageUrl } of groups) {
     const order = resolveFrameNames(config, built)
-    const items: Array<{ frameKey: string; styleAttr: string }> = []
+    const items: Array<{
+      frameKey: string
+      styleAttr: string
+      defaultPosX: number
+      defaultPosY: number
+    }> = []
     for (const frameKey of order) {
       const rect = built.frames[frameKey]
       if (!rect) continue
@@ -57,9 +79,14 @@ export function buildPreviewSections(
         rect,
         imageUrl
       )
+      /** 与组件不传 width/height 时一致：scale=1 → background-position 为 -x、-y（px） */
+      const defaultPosX = -rect.x
+      const defaultPosY = -rect.y
       items.push({
         frameKey,
         styleAttr: inlineStyleToCssString(style),
+        defaultPosX,
+        defaultPosY,
       })
     }
     sections.push({
@@ -82,14 +109,39 @@ export function renderPreviewHtml(
       const initialNamesJson = JSON.stringify(sec.items.map((it) => it.frameKey))
       const framesHtml = sec.items
         .map((it, frameIdx) => {
-          const rawSnippet = vueSnippet(sec.name, it.frameKey)
+          const rawSnippet = vueSnippet(
+            sec.name,
+            it.frameKey,
+            it.defaultPosX,
+            it.defaultPosY
+          )
           const inputId = `hyp-sprites-frame-name-${secIdx}-${frameIdx}`
+          const posXId = `hyp-sprites-pos-x-${secIdx}-${frameIdx}`
+          const posYId = `hyp-sprites-pos-y-${secIdx}-${frameIdx}`
           return `
       <section class="frame">
         <div class="frame-head">
           <label class="frame-name-label" for="${inputId}">spritesName</label>
           <input type="text" id="${inputId}" class="frame-name-input" value="${escapeHtml(it.frameKey)}" spellcheck="false" autocomplete="off" />
           <button type="button" class="btn secondary btn-compact" data-copy-name="${escapeHtml(it.frameKey)}" title="复制当前帧名">复制</button>
+        </div>
+        <div class="frame-pos-row">
+          <div class="frame-pos-field">
+            <label class="frame-pos-label" for="${posXId}">positionX</label>
+            <div class="stepper">
+              <button type="button" class="btn secondary btn-compact btn-step" data-dir="-1" aria-label="positionX 减 1">−</button>
+              <input type="number" id="${posXId}" class="position-x-input" value="${it.defaultPosX}" step="any" />
+              <button type="button" class="btn secondary btn-compact btn-step" data-dir="1" aria-label="positionX 加 1">+</button>
+            </div>
+          </div>
+          <div class="frame-pos-field">
+            <label class="frame-pos-label" for="${posYId}">positionY</label>
+            <div class="stepper">
+              <button type="button" class="btn secondary btn-compact btn-step" data-dir="-1" aria-label="positionY 减 1">−</button>
+              <input type="number" id="${posYId}" class="position-y-input" value="${it.defaultPosY}" step="any" />
+              <button type="button" class="btn secondary btn-compact btn-step" data-dir="1" aria-label="positionY 加 1">+</button>
+            </div>
+          </div>
         </div>
         <div class="row">
           <div class="thumb-wrap" role="img" aria-label="${escapeHtml(it.frameKey)}" data-thumb-label>
@@ -150,6 +202,12 @@ export function renderPreviewHtml(
     .frame { margin-bottom: 1.25rem; }
     .frame:last-child { margin-bottom: 0; }
     .frame-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .frame-pos-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-bottom: 0.5rem; }
+    .frame-pos-field { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+    .frame-pos-label { font-size: 0.75rem; font-weight: 600; color: #555; margin: 0; }
+    .stepper { display: inline-flex; align-items: center; gap: 0.25rem; }
+    .stepper input[type="number"] { width: 5.5rem; padding: 0.3rem 0.4rem; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+    .stepper input[type="number"]:focus { outline: none; border-color: #2a6; box-shadow: 0 0 0 2px rgba(42,102,170,.2); }
     .frame-name-label { font-size: 0.75rem; font-weight: 600; color: #555; margin: 0; }
     .frame-name-input { flex: 1 1 12rem; min-width: 8rem; max-width: 100%; padding: 0.35rem 0.5rem; font-size: 0.95rem; font-weight: 600; color: #333; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
     .frame-name-input:focus { outline: none; border-color: #2a6; box-shadow: 0 0 0 2px rgba(42,102,170,.2); }
@@ -200,7 +258,7 @@ export function renderPreviewHtml(
 </head>
 <body>
   <h1>hyp-sprites-img — 雪碧图帧预览</h1>
-  <p class="hint">一级标题为配置中的 <code>name</code>，右侧可复制整组 <code>spritesName</code> 供 Vite 配置；每组最右侧为<strong>整图雪碧图</strong>预览；帧名可在输入框中修改（仅预览，不写入磁盘），名称右侧可复制单帧名。</p>
+  <p class="hint">一级标题为配置中的 <code>name</code>，右侧可复制整组 <code>spritesName</code> 供 Vite 配置；每组最右侧为<strong>整图雪碧图</strong>预览；帧名可在输入框中修改（仅预览，不写入磁盘），名称右侧可复制单帧名。<code>positionX</code> / <code>positionY</code> 为与组件一致的背景坐标（px），默认对应当前帧；可用步进器微调，缩略图与复制的 Vue 片段会同步。</p>
   ${blocks}
   <div id="hyp-sprites-toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <script>
@@ -230,8 +288,28 @@ export function renderPreviewHtml(
         showToast('请从对话框中复制');
         return Promise.resolve();
       }
-      function vueSnippetJs(groupName, frameKey) {
-        return '<hypSpritesImgCom\\n  name="' + groupName + '"\\n  sprites-name="' + frameKey + '"\\n/>';
+      function vueSnippetJs(groupName, frameKey, posX, posY) {
+        return '<hypSpritesImgCom\\n  name="' + groupName + '"\\n  sprites-name="' + frameKey + '"\\n  :positionX="' + posX + '"\\n  :positionY="' + posY + '"\\n/>';
+      }
+      function syncFrameSnippet(frame) {
+        var article = frame.closest('article.group');
+        if (!article || !frame) return;
+        var groupName = article.getAttribute('data-group-name') || '';
+        var nameInput = frame.querySelector('.frame-name-input');
+        var key = (nameInput && nameInput.value || '').trim();
+        var keyForSnippet = key.length ? key : (nameInput && nameInput.defaultValue || '').trim() || '0';
+        var pxInp = frame.querySelector('.position-x-input');
+        var pyInp = frame.querySelector('.position-y-input');
+        var px = pxInp ? parseFloat(pxInp.value) : NaN;
+        var py = pyInp ? parseFloat(pyInp.value) : NaN;
+        if (Number.isNaN(px)) px = pxInp ? parseFloat(pxInp.defaultValue) : 0;
+        if (Number.isNaN(px)) px = 0;
+        if (Number.isNaN(py)) py = pyInp ? parseFloat(pyInp.defaultValue) : 0;
+        if (Number.isNaN(py)) py = 0;
+        var pre = frame.querySelector('pre.snippet');
+        if (pre) pre.textContent = vueSnippetJs(groupName, keyForSnippet, px, py);
+        var thumb = frame.querySelector('.thumb');
+        if (thumb) thumb.style.backgroundPosition = px + 'px ' + py + 'px';
       }
       function formatSpritesArrayForVite(names) {
         return '[' + names.map(function (n) { return JSON.stringify(n); }).join(', ') + ']';
@@ -255,16 +333,34 @@ export function renderPreviewHtml(
           var frame = inp.closest('section.frame');
           var article = inp.closest('article.group');
           if (!frame || !article) return;
-          var groupName = article.getAttribute('data-group-name') || '';
           var key = (inp.value || '').trim();
           var keyForSnippet = key.length ? key : (inp.defaultValue || '').trim() || '0';
           var copyBtn = frame.querySelector('button[data-copy-name]');
           if (copyBtn) copyBtn.setAttribute('data-copy-name', keyForSnippet);
-          var pre = frame.querySelector('pre.snippet');
-          if (pre) pre.textContent = vueSnippetJs(groupName, keyForSnippet);
-          var thumb = frame.querySelector('[data-thumb-label]');
-          if (thumb) thumb.setAttribute('aria-label', keyForSnippet);
+          syncFrameSnippet(frame);
+          var thumbLabel = frame.querySelector('[data-thumb-label]');
+          if (thumbLabel) thumbLabel.setAttribute('aria-label', keyForSnippet);
           syncGroupSpritesData(article);
+        });
+      });
+      document.querySelectorAll('.position-x-input, .position-y-input').forEach(function (inp) {
+        inp.addEventListener('input', function () {
+          var frame = inp.closest('section.frame');
+          if (frame) syncFrameSnippet(frame);
+        });
+      });
+      document.querySelectorAll('.btn-step').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var field = btn.closest('.frame-pos-field');
+          if (!field) return;
+          var input = field.querySelector('input[type="number"]');
+          if (!input) return;
+          var d = parseFloat(btn.getAttribute('data-dir'));
+          if (!Number.isFinite(d)) return;
+          var v = parseFloat(input.value);
+          if (Number.isNaN(v)) v = parseFloat(input.defaultValue) || 0;
+          input.value = String(v + d);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
         });
       });
       document.querySelectorAll('button[data-copy-snippet]').forEach(function (btn) {
